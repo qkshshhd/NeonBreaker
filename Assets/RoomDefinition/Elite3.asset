@@ -1,0 +1,57 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f89c016e1879b9646880d551277d7291, type: 3}
+  m_Name: Elite3
+  m_EditorClassIdentifier: Assembly-CSharp::NeonBreaker.Rooms.RoomDefinition
+  displayName: Elite Room
+  roomType: 1
+  lockDoorsOnEnter: 1
+  unlockExitOnClear: 1
+  clearDelay: 0.4
+  waves:
+  - displayName: fd
+    startDelay: 0
+    spawnGroups:
+    - poolKey: {fileID: 11400000, guid: 2a7f27529e2097a44a94f5a2f2b7eee9, type: 2}
+      count: 3
+      spawnInterval: 0.2
+      startDelay: 1
+  - displayName: fd
+    startDelay: 1
+    spawnGroups:
+    - poolKey: {fileID: 11400000, guid: 2a7f27529e2097a44a94f5a2f2b7eee9, type: 2}
+      count: 2
+      spawnInterval: 0.2
+      startDelay: 1
+    - poolKey: {fileID: 11400000, guid: cbda9eb0a059f4348b058d2df9b2362b, type: 2}
+      count: 3
+      spawnInterval: 1
+      startDelay: 1
+  - displayName: fd
+    startDelay: 1
+    spawnGroups:
+    - poolKey: {fileID: 11400000, guid: 2a7f27529e2097a44a94f5a2f2b7eee9, type: 2}
+      count: 2
+      spawnInterval: 1
+      startDelay: 1
+    - poolKey: {fileID: 11400000, guid: cbda9eb0a059f4348b058d2df9b2362b, type: 2}
+      count: 5
+      spawnInterval: 1
+      startDelay: 1
+    - poolKey: {fileID: 11400000, guid: 566b50d07bd97034ea900b6d768768e7, type: 2}
+      count: 2
+      spawnInterval: 1
+      startDelay: 1
+  clearReward: 0
+  waitForUpgradeRewardBeforeExit: 1
+  healAmount: 35
+  healPercent: 0

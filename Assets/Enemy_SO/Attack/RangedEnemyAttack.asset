@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e211173a9a995f847b1277dae61acb25, type: 3}
+  m_Name: RangedEnemyAttack
+  m_EditorClassIdentifier: Assembly-CSharp::NeonBreaker.Enemies.RangedAttackDefinition
+  projectilePoolKey: {fileID: 11400000, guid: 79ab9475d0e4a5d498a094a373e16081, type: 2}
+  projectileDefinition: {fileID: 11400000, guid: 8ddd01f8db6799043997c6a055965364, type: 2}
+  fireRange: 8
+  preferredRange: 5.5
+  retreatRange: 3
+  retreatSpeedMultiplier: 0.85
+  cooldown: 1.4
+  windUpTime: 0.35
+  recoveryTime: 0.25
+  projectileCount: 1
+  spreadAngle: 0
+  muzzleForwardOffset: 0.45
+  requireLineOfSight: 1
+  lineOfSightBlockers:
+    serializedVersion: 2
+    m_Bits: 0

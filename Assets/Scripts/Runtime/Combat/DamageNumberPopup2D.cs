@@ -1,0 +1,89 @@
+using TMPro;
+using UnityEngine;
+
+namespace NeonBreaker.Combat
+{
+    public sealed class DamageNumberPopup2D : MonoBehaviour
+    {
+        [SerializeField] private TextMeshPro text;
+        [SerializeField] private float lifetime = 0.55f;
+        [SerializeField] private float riseDistance = 0.75f;
+        [SerializeField] private float horizontalDrift = 0.18f;
+        [SerializeField] private AnimationCurve alphaCurve = AnimationCurve.EaseInOut(0f, 1f, 1f, 0f);
+        [SerializeField] private AnimationCurve scaleCurve = AnimationCurve.EaseInOut(0f, 1.1f, 1f, 0.85f);
+
+        private Vector3 startPosition;
+        private Vector3 drift;
+        private Color baseColor = Color.white;
+        private float timer;
+
+        private void Awake()
+        {
+            if (text == null)
+            {
+                text = GetComponentInChildren<TextMeshPro>(true);
+            }
+        }
+
+        private void OnEnable()
+        {
+            timer = 0f;
+            startPosition = transform.position;
+        }
+
+        private void Update()
+        {
+            float safeLifetime = Mathf.Max(0.01f, lifetime);
+            timer += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(timer / safeLifetime);
+
+            transform.position = startPosition + Vector3.up * (riseDistance * t) + drift * t;
+
+            float scale = scaleCurve != null ? scaleCurve.Evaluate(t) : 1f;
+            transform.localScale = Vector3.one * scale;
+
+            if (text != null)
+            {
+                Color color = baseColor;
+                color.a *= alphaCurve != null ? alphaCurve.Evaluate(t) : 1f - t;
+                text.color = color;
+            }
+
+            if (timer >= safeLifetime)
+            {
+                Destroy(gameObject);
+            }
+        }
+
+        public void Play(
+            string value,
+            Color color,
+            float scaleMultiplier,
+            string sortingLayerName,
+            int sortingOrder,
+            FontStyles fontStyle)
+        {
+            if (text == null)
+            {
+                text = GetComponentInChildren<TextMeshPro>(true);
+            }
+
+            baseColor = color;
+            drift = Vector3.right * Random.Range(-horizontalDrift, horizontalDrift);
+            timer = 0f;
+            startPosition = transform.position;
+            transform.localScale = Vector3.one * Mathf.Max(0.01f, scaleMultiplier);
+
+            if (text == null)
+            {
+                return;
+            }
+
+            text.text = value;
+            text.color = baseColor;
+            text.fontStyle = fontStyle;
+            text.sortingLayerID = SortingLayer.NameToID(sortingLayerName);
+            text.sortingOrder = sortingOrder;
+        }
+    }
+}

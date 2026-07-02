@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 508fd7bb29bf0ab44bea8c679af8e6f6, type: 3}
+  m_Name: BossBehaviorDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::NeonBreaker.Enemies.BossBehaviorDefinition
+  engageRange: 14
+  preferredRange: 5.5
+  retreatRange: 3
+  retreatSpeedMultiplier: 0.75
+  patternCooldown: 1.15
+  windUpTime: 0.45
+  recoveryTime: 0.45
+  projectilePoolKey: {fileID: 11400000, guid: 79ab9475d0e4a5d498a094a373e16081, type: 2}
+  projectileDefinition: {fileID: 11400000, guid: 8ddd01f8db6799043997c6a055965364, type: 2}
+  aimedProjectileCount: 3
+  aimedSpreadAngle: 22
+  radialProjectileCount: 8
+  radialAngleOffsetPerPattern: 11
+  muzzleForwardOffset: 0.65
+  dashEveryNthPattern: 3
+  dashPrepareTime: 0.25
+  dashSpeed: 8
+  dashDuration: 0.45
+  contactDamage: 20
+  contactKnockback: 10
+  contactKnockbackDuration: 0.08
+  contactCheckRadius: 0.7
+  hitLayers:
+    serializedVersion: 2
+    m_Bits: 64
+  wallLayers:
+    serializedVersion: 2
+    m_Bits: 256
+  phaseTwoHealthRatio: 0.5
+  phaseTwoCooldownMultiplier: 0.72
+  phaseTwoExtraAimedProjectiles: 2
+  phaseTwoExtraRadialProjectiles: 4
+  phaseTwoDashSpeedMultiplier: 1.2

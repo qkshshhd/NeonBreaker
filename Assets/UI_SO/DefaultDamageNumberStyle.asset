@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10e62a7b723d49047beadb60ffd587fe, type: 3}
+  m_Name: DefaultDamageNumberStyle
+  m_EditorClassIdentifier: Assembly-CSharp::NeonBreaker.Combat.DamageNumberStyleDefinition
+  popupPrefab: {fileID: 170394067059196420, guid: 4c2e2f6f624280947abda2c840f61fd9, type: 3}
+  showCriticalNumbers: 1
+  minAmountToShow: 0.5
+  spawnOffset: {x: 0, y: 0.55, z: 0}
+  randomHorizontalOffset: 0.25
+  normalFormat: '{0}'
+  criticalFormat: '{0}!'
+  normalFontStyle: 0
+  criticalFontStyle: 1
+  normalColor: {r: 0, g: 0.1878432, b: 1, a: 1}
+  criticalColor: {r: 1, g: 0.78, b: 0.22, a: 1}
+  normalScale: 1
+  criticalScale: 1.25
+  sortingLayerName: Default
+  sortingOrder: 80

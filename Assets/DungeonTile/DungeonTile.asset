@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2bb25f5855963ca4a812cbbecc7db4a0, type: 3}
+  m_Name: DungeonTile
+  m_EditorClassIdentifier: Assembly-CSharp::NeonBreaker.Dungeon.DungeonTileSet
+  floorSprites:
+  - sprite: {fileID: 209751846086810860, guid: 87b40c9a71f914849a2a1d675ee2047a, type: 3}
+    weight: 1
+  wallSprites:
+  - sprite: {fileID: -623661526608458578, guid: c32e49b8c2ebf0e4da193977103466e8, type: 3}
+    weight: 1
+  doorSprites:
+  - sprite: {fileID: 563586620515238700, guid: cc3a9caad3cf7934ea19c7f88f3dd671, type: 3}
+    weight: 1

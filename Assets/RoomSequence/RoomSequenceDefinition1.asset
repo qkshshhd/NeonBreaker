@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7eff84eb7a7e5a0409094a0556c41d1c, type: 3}
+  m_Name: RoomSequenceDefinition1
+  m_EditorClassIdentifier: Assembly-CSharp::NeonBreaker.Rooms.RoomSequenceDefinition
+  minRoomCount: 6
+  maxRoomCount: 8
+  firstSpecialRoomIndex: 2
+  startRooms:
+  - {fileID: 11400000, guid: 613581b4082604048bf8b06fa65969f1, type: 2}
+  combatRooms:
+  - {fileID: 11400000, guid: 930ff9fa32390ef44ac2277428809c0c, type: 2}
+  - {fileID: 11400000, guid: 3082fc74f1e7d3e4f95eea66b0fa6821, type: 2}
+  - {fileID: 11400000, guid: b5acd2200a4c15546aef7123b2cd98ce, type: 2}
+  eliteRooms:
+  - {fileID: 11400000, guid: c3906b1cfa320dc4c8b0a4edc1c2a26c, type: 2}
+  - {fileID: 11400000, guid: 212b0901e11dbc2468f3932241172782, type: 2}
+  - {fileID: 11400000, guid: cf4e0eefc76ef3340a0757451c9d9df2, type: 2}
+  rewardRooms:
+  - {fileID: 11400000, guid: 613581b4082604048bf8b06fa65969f1, type: 2}
+  restRooms:
+  - {fileID: 11400000, guid: 84a3d42c65a88ec45b3593972f6ed199, type: 2}
+  bossRooms:
+  - {fileID: 11400000, guid: e523aec64110e1c4cb1fa47e797e58bb, type: 2}
+  eliteChance: 0.18
+  rewardChance: 0.18
+  restChance: 0.12
+  preventConsecutiveSpecialRooms: 1
+  preventImmediateRoomRepeat: 1
