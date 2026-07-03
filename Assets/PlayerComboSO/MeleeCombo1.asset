@@ -14,4 +14,61 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::NeonBreaker.Combat.MeleeComboDefinition
   resetWindow: 0.85
   loopCombo: 0
-  steps: []
+  steps:
+  - displayName: "1\uD0C0"
+    animationIndex: 0
+    cooldown: 0.24
+    recoveryTime: 0.06
+    damageMultiplier: 0.75
+    rangeMultiplier: 1
+    angle: 85
+    knockbackMultiplier: 0.5
+    hitWindows: []
+  - displayName: "2\uD0C0"
+    animationIndex: 1
+    cooldown: 0.24
+    recoveryTime: 0.06
+    damageMultiplier: 0.8
+    rangeMultiplier: 1
+    angle: 90
+    knockbackMultiplier: 0.5
+    hitWindows: []
+  - displayName: "3\uD0C0"
+    animationIndex: 2
+    cooldown: 0.34
+    recoveryTime: 0.08
+    damageMultiplier: 1
+    rangeMultiplier: 1.15
+    angle: 90
+    knockbackMultiplier: 0.5
+    hitWindows:
+    - time: 0.05
+      damageMultiplier: 0.55
+      rangeMultiplier: 1
+      angle: 30
+      knockbackMultiplier: 1
+      clearHitTargetsBeforeThisHit: 1
+    - time: 0.15
+      damageMultiplier: 0.55
+      rangeMultiplier: 1
+      angle: 30
+      knockbackMultiplier: 1
+      clearHitTargetsBeforeThisHit: 1
+  - displayName: "4\uD0C0"
+    animationIndex: 3
+    cooldown: 0.42
+    recoveryTime: 0.12
+    damageMultiplier: 1.05
+    rangeMultiplier: 1.05
+    angle: 360
+    knockbackMultiplier: 0.8
+    hitWindows: []
+  - displayName: "5\uD0C0"
+    animationIndex: 4
+    cooldown: 0.58
+    recoveryTime: 0.18
+    damageMultiplier: 1.8
+    rangeMultiplier: 1.6
+    angle: 35
+    knockbackMultiplier: 1.6
+    hitWindows: []

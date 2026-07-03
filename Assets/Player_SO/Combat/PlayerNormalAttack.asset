@@ -16,7 +16,7 @@ MonoBehaviour:
   windUpTime: 0.2
   recoveryTime: 0.14
   damage: 20
-  range: 3.5
+  range: 2
   angle: 90
   knockbackForce: 8
   knockbackDuration: 0.08

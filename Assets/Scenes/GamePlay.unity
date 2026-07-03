@@ -1096,7 +1096,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::NeonBreaker.Player.MeleeAttack2D
   attackOrigin: {fileID: 0}
   definition: {fileID: 11400000, guid: 7b665dcdc7183a642b8aef7b709307f6, type: 2}
-  comboDefinition: {fileID: 0}
+  comboDefinition: {fileID: 11400000, guid: 693e49f2e31d4874cb94104dcec6dad7, type: 2}
   hitLayers:
     serializedVersion: 2
     m_Bits: 128

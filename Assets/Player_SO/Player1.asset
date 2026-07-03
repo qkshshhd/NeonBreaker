@@ -23,4 +23,5 @@ MonoBehaviour:
   dashCooldown: 0.55
   invulnerableDuringDash: 1
   basicAttack: {fileID: 0}
+  basicAttackCombo: {fileID: 11400000, guid: 693e49f2e31d4874cb94104dcec6dad7, type: 2}
   attackWhileHeld: 1
