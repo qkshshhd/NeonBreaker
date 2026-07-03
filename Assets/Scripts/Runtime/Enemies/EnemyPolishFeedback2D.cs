@@ -102,10 +102,11 @@ namespace NeonBreaker.Enemies
             PoolKey slashPoolKey = ResolveBasicAttackSlashVfxPoolKey(damage);
             Vector3 center = GetFeedbackCenter();
             GetImpactVfxTransform(damage, center, out Vector3 position, out Quaternion rotation);
+            Quaternion damageRotation = GetRandomizedRotation(rotation, randomizeDamageVfxRotation, damageVfxRandomRotationRange);
 
             Play(clip, center);
-            Spawn(hitImpactVfx, hitImpactPoolKey, position, GetRandomizedRotation(rotation, randomizeDamageVfxRotation, damageVfxRandomRotationRange), true);
-            Spawn(slashVfx, slashPoolKey, position, GetRandomizedRotation(rotation, randomizeDamageVfxRotation, damageVfxRandomRotationRange), true);
+            Spawn(hitImpactVfx, hitImpactPoolKey, position, damageRotation, true);
+            Spawn(slashVfx, slashPoolKey, center, damageRotation, true);
             DrawImpactDebug(center, position);
         }
 

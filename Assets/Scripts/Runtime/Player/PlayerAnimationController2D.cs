@@ -34,6 +34,7 @@ namespace NeonBreaker.Player
         [Header("Attack")]
         [SerializeField, Min(1)] private int attackAnimationCount = 2;
         [SerializeField] private bool alternateAttackAnimations = true;
+        [SerializeField] private bool useMeleeComboAnimationIndex = true;
 
         private readonly HashSet<int> parameters = new HashSet<int>();
 
@@ -219,11 +220,13 @@ namespace NeonBreaker.Player
             CaptureActionFacing();
 
             int animationCount = Mathf.Max(1, attackAnimationCount);
-            int attackIndex = alternateAttackAnimations ? nextAttackIndex : 0;
+            int attackIndex = useMeleeComboAnimationIndex && meleeAttack != null
+                ? Mathf.Clamp(meleeAttack.CurrentAttackAnimationIndex, 0, animationCount - 1)
+                : alternateAttackAnimations ? nextAttackIndex : 0;
             SetInteger(AttackIndexHash, attackIndex);
             SetTrigger(AttackHash);
 
-            if (alternateAttackAnimations)
+            if (!useMeleeComboAnimationIndex && alternateAttackAnimations)
             {
                 nextAttackIndex = (nextAttackIndex + 1) % animationCount;
             }

@@ -70,7 +70,7 @@ namespace NeonBreaker.Player
         [SerializeField] private bool useAlternateAttackSwingRotationOffset = true;
         [SerializeField] private float alternateAttackSwingRotationOffset = 45f;
         [SerializeField] private bool scaleAttackSwingVfxByAttackRange = true;
-        [SerializeField] private bool useMeleeAttackBaseRangeForSwingScale = true;
+        [SerializeField] private bool useMeleeAttackBaseRangeForSwingScale;
         [SerializeField, Min(0.01f)] private float attackSwingVfxBaseRange = 1.35f;
         [SerializeField] private Vector3 attackSwingVfxBaseScale = Vector3.one;
         [SerializeField, Min(0f)] private float attackSwingRangeScaleStrength = 1f;
@@ -99,7 +99,7 @@ namespace NeonBreaker.Player
         private SpriteRenderer[] spriteRenderers;
         private int attackSwingSequence;
 
-        private const int CurrentAttackSwingScaleSettingsVersion = 1;
+        private const int CurrentAttackSwingScaleSettingsVersion = 2;
 
         private void Awake()
         {
@@ -487,7 +487,9 @@ namespace NeonBreaker.Player
         {
             if (meleeAttack != null)
             {
-                return meleeAttack.EffectiveAttackRange;
+                return meleeAttack.CurrentAttackEffectiveRange > 0f
+                    ? meleeAttack.CurrentAttackEffectiveRange
+                    : meleeAttack.EffectiveAttackRange;
             }
 
             return attackSwingVfxBaseRange;
@@ -566,7 +568,7 @@ namespace NeonBreaker.Player
             if (attackSwingScaleSettingsVersion < CurrentAttackSwingScaleSettingsVersion)
             {
                 scaleAttackSwingVfxByAttackRange = true;
-                useMeleeAttackBaseRangeForSwingScale = true;
+                useMeleeAttackBaseRangeForSwingScale = false;
 
                 if (attackSwingVfxBaseScale.sqrMagnitude <= 0.0001f)
                 {

@@ -24,6 +24,7 @@ namespace NeonBreaker.Player
 
         [Header("Combat")]
         [SerializeField] private MeleeAttackDefinition basicAttack;
+        [SerializeField] private MeleeComboDefinition basicAttackCombo;
         [SerializeField] private bool attackWhileHeld = true;
 
         public float MaxHealth => maxHealth;
@@ -37,6 +38,7 @@ namespace NeonBreaker.Player
         public float DashCooldown => dashCooldown;
         public bool InvulnerableDuringDash => invulnerableDuringDash;
         public MeleeAttackDefinition BasicAttack => basicAttack;
+        public MeleeComboDefinition BasicAttackCombo => basicAttackCombo;
         public bool AttackWhileHeld => attackWhileHeld;
     }
 }

@@ -226,6 +226,7 @@ namespace NeonBreaker.Player
             movement.Configure(definition);
             dash.Configure(definition);
             attack.Configure(definition.BasicAttack);
+            attack.ConfigureCombo(definition.BasicAttackCombo);
         }
 
         private void EnsureDefaultDamageFeedback()
@@ -336,11 +337,8 @@ namespace NeonBreaker.Player
 
             public override void Enter()
             {
-                timer = Controller.definition != null && Controller.definition.BasicAttack != null
-                    ? Controller.definition.BasicAttack.WindUpTime + Controller.definition.BasicAttack.RecoveryTime
-                    : 0.2f;
-
-                Controller.attack.TryAttack(Controller.input.AimDirection);
+                bool didAttack = Controller.attack.TryAttack(Controller.input.AimDirection);
+                timer = didAttack ? Controller.attack.CurrentAttackStateDuration : 0f;
             }
 
             public override void Tick(float deltaTime)
