@@ -30,6 +30,8 @@ namespace NeonBreaker.Player
         [Header("VFX")]
         [SerializeField] private GameObject attackSwingVfx;
         [SerializeField] private PoolKey attackSwingVfxPoolKey;
+        [Tooltip("Optional attack swing VFX by MeleeAttack2D.CurrentAttackAnimationIndex. Empty entries use the fallback attackSwingVfx.")]
+        [SerializeField] private AttackSwingVfxEntry[] attackSwingVfxByAnimationIndex = new AttackSwingVfxEntry[5];
         [SerializeField] private GameObject attackHitVfx;
         [SerializeField] private GameObject dashStartVfx;
         [SerializeField] private PoolKey dashStartVfxPoolKey;
@@ -100,6 +102,23 @@ namespace NeonBreaker.Player
         private int attackSwingSequence;
 
         private const int CurrentAttackSwingScaleSettingsVersion = 2;
+
+        [System.Serializable]
+        private struct AttackSwingVfxEntry
+        {
+            [SerializeField] private GameObject prefab;
+            [SerializeField] private PoolKey poolKey;
+
+            public AttackSwingVfxEntry(GameObject prefab, PoolKey poolKey)
+            {
+                this.prefab = prefab;
+                this.poolKey = poolKey;
+            }
+
+            public GameObject Prefab => prefab;
+            public PoolKey PoolKey => poolKey;
+            public bool IsConfigured => prefab != null || poolKey != null;
+        }
 
         private void Awake()
         {
@@ -206,7 +225,8 @@ namespace NeonBreaker.Player
             Play(attackSwingClip);
             bool flipY = ShouldFlipAttackSwingY();
             GetAttackSwingVfxTransform(flipY, out Vector3 position, out Quaternion rotation);
-            GameObject swing = Spawn(attackSwingVfx, position, rotation, false, attackSwingVfxPoolKey);
+            AttackSwingVfxEntry attackSwing = ResolveAttackSwingVfx();
+            GameObject swing = Spawn(attackSwing.Prefab, position, rotation, false, attackSwing.PoolKey);
             Vector3 scale = GetAttackSwingVfxScale();
             LogAttackSwingVfxScale(scale);
             ApplyAttackSwingTransform(swing, position, rotation, scale, flipAttackSwingVisual && flipY);
@@ -627,6 +647,24 @@ namespace NeonBreaker.Player
 
             bool isOddSwing = attackSwingSequence % 2 == 1;
             return firstAttackSwingUsesFlippedY ? !isOddSwing : isOddSwing;
+        }
+
+        private AttackSwingVfxEntry ResolveAttackSwingVfx()
+        {
+            if (meleeAttack != null && attackSwingVfxByAnimationIndex != null)
+            {
+                int animationIndex = meleeAttack.CurrentAttackAnimationIndex;
+                if (animationIndex >= 0 && animationIndex < attackSwingVfxByAnimationIndex.Length)
+                {
+                    AttackSwingVfxEntry entry = attackSwingVfxByAnimationIndex[animationIndex];
+                    if (entry.IsConfigured)
+                    {
+                        return entry;
+                    }
+                }
+            }
+
+            return new AttackSwingVfxEntry(attackSwingVfx, attackSwingVfxPoolKey);
         }
 
         private void ApplyAttackSwingTransform(GameObject swing, Vector3 position, Quaternion rotation, Vector3 scale, bool flipY)
