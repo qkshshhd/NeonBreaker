@@ -28,7 +28,10 @@ namespace NeonBreaker.Rooms
         private Tilemap activeRoomTilemap;
         private RectInt activeRoomBounds;
         private bool hasActiveRoomBounds;
+        private bool hasActiveRoomCenterOverride;
+        private Vector3 activeRoomCenterOverride;
         private readonly List<Vector3Int> activeRoomSpawnCells = new List<Vector3Int>();
+        private readonly List<Vector3> activeRoomSpawnPositions = new List<Vector3>();
         private readonly Collider2D[] spawnOverlapResults = new Collider2D[8];
 
         private void Awake()
@@ -50,9 +53,25 @@ namespace NeonBreaker.Rooms
 
         public void SetActiveRoom(RectInt roomBounds, Tilemap roomTilemap)
         {
+            SetActiveRoomSpawnData(roomBounds, roomTilemap, null, null);
+        }
+
+        public void SetActiveRoomSpawnData(RectInt roomBounds, Tilemap roomTilemap, Vector3? centerOverride, IReadOnlyList<Vector3> spawnPositions)
+        {
             activeRoomBounds = roomBounds;
             activeRoomTilemap = roomTilemap;
             hasActiveRoomBounds = roomTilemap != null;
+            hasActiveRoomCenterOverride = centerOverride.HasValue;
+            activeRoomCenterOverride = centerOverride.GetValueOrDefault();
+            activeRoomSpawnPositions.Clear();
+            if (spawnPositions != null)
+            {
+                for (int i = 0; i < spawnPositions.Count; i++)
+                {
+                    activeRoomSpawnPositions.Add(spawnPositions[i]);
+                }
+            }
+
             RebuildActiveRoomSpawnCells();
 
             if (roomTilemap == null)
@@ -69,7 +88,9 @@ namespace NeonBreaker.Rooms
         {
             activeRoomTilemap = null;
             hasActiveRoomBounds = false;
+            hasActiveRoomCenterOverride = false;
             activeRoomSpawnCells.Clear();
+            activeRoomSpawnPositions.Clear();
         }
 
         public void SetPlayer(Transform playerTransform)
@@ -139,6 +160,12 @@ namespace NeonBreaker.Rooms
         {
             position = transform.position;
 
+            if (hasActiveRoomCenterOverride)
+            {
+                position = activeRoomCenterOverride;
+                return true;
+            }
+
             if (!hasActiveRoomBounds || activeRoomTilemap == null)
             {
                 return false;
@@ -206,6 +233,16 @@ namespace NeonBreaker.Rooms
 
         private Vector3 GetSpawnPosition()
         {
+            if (activeRoomSpawnPositions.Count > 0)
+            {
+                return GetRandomTemplateSpawnPosition();
+            }
+
+            if (hasActiveRoomCenterOverride && activeRoomSpawnCells.Count == 0)
+            {
+                return activeRoomCenterOverride;
+            }
+
             if (hasActiveRoomBounds && activeRoomTilemap != null)
             {
                 return GetRandomRoomPosition();
@@ -222,6 +259,21 @@ namespace NeonBreaker.Rooms
 
             Vector2 offset = UnityEngine.Random.insideUnitCircle.normalized * fallbackSpawnRadius;
             return transform.position + (Vector3)offset;
+        }
+
+        private Vector3 GetRandomTemplateSpawnPosition()
+        {
+            int attempts = Mathf.Max(1, roomSpawnAttempts);
+            for (int i = 0; i < attempts; i++)
+            {
+                Vector3 position = activeRoomSpawnPositions[UnityEngine.Random.Range(0, activeRoomSpawnPositions.Count)];
+                if (IsSpawnPositionValid(position))
+                {
+                    return position;
+                }
+            }
+
+            return activeRoomSpawnPositions[UnityEngine.Random.Range(0, activeRoomSpawnPositions.Count)];
         }
 
         private Vector3 GetRandomRoomPosition()

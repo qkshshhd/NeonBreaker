@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NeonBreaker.Combat;
 using NeonBreaker.Dungeon;
 using NeonBreaker.Pooling;
@@ -36,6 +37,7 @@ namespace NeonBreaker.Rooms
         private bool waitingForExit;
         private bool waitingForReward;
         private RoomDefinition pendingClearedRoom;
+        private readonly List<Vector3> roomSpawnPositions = new List<Vector3>();
 
         public event Action<int, RoomDefinition> RunRoomStarted;
         public event Action<int, RoomDefinition> RunRoomCombatCleared;
@@ -353,7 +355,7 @@ namespace NeonBreaker.Rooms
 
             if (generateDungeonOnRunStart || !dungeonGenerator.HasGeneratedDungeon)
             {
-                dungeonGenerator.Generate(roomSequence.Length);
+                dungeonGenerator.Generate(roomSequence);
             }
         }
 
@@ -366,7 +368,12 @@ namespace NeonBreaker.Rooms
 
             if (dungeonGenerator.TryGetRoomBounds(roomIndex, out RectInt roomBounds))
             {
-                enemySpawner.SetActiveRoom(roomBounds, dungeonGenerator.FloorTilemap);
+                bool hasTemplateSpawnPositions = dungeonGenerator.TryGetRoomSpawnPositions(roomIndex, roomSpawnPositions);
+                enemySpawner.SetActiveRoomSpawnData(
+                    roomBounds,
+                    dungeonGenerator.FloorTilemap,
+                    dungeonGenerator.GetRoomCenterWorld(roomIndex),
+                    hasTemplateSpawnPositions ? roomSpawnPositions : null);
             }
         }
 

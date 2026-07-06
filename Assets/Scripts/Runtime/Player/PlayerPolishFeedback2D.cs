@@ -65,24 +65,23 @@ namespace NeonBreaker.Player
         [Header("Attack Swing Direction")]
         [SerializeField] private bool rotateAttackSwingVfxToAimDirection = true;
         [SerializeField] private bool placeAttackSwingVfxByAttackRange = true;
+        [SerializeField] private bool centerFullCircleAttackSwingVfx = true;
+        [SerializeField, Range(1f, 360f)] private float fullCircleAttackAngleThreshold = 359f;
         [SerializeField, Range(0f, 1f)] private float attackSwingRangePositionFactor = 0.5f;
         [SerializeField, Min(0f)] private float attackSwingForwardOffset = 0.65f;
         [SerializeField] private Vector3 attackSwingWorldOffset;
         [SerializeField] private float attackSwingRotationOffset;
-        [SerializeField] private bool useAlternateAttackSwingRotationOffset = true;
-        [SerializeField] private float alternateAttackSwingRotationOffset = 45f;
         [SerializeField] private bool scaleAttackSwingVfxByAttackRange = true;
         [SerializeField] private bool useMeleeAttackBaseRangeForSwingScale;
         [SerializeField, Min(0.01f)] private float attackSwingVfxBaseRange = 1.35f;
         [SerializeField] private Vector3 attackSwingVfxBaseScale = Vector3.one;
         [SerializeField, Min(0f)] private float attackSwingRangeScaleStrength = 1f;
         [SerializeField] private Vector3 attackSwingRangeScaleAxis = Vector3.one;
+        [SerializeField] private bool scaleFullCircleAttackSwingVfxByDiameter = true;
+        [SerializeField] private Vector3 fullCircleAttackSwingRangeScaleAxis = new Vector3(1f, 1f, 1f);
+        [SerializeField, Min(0.01f)] private float fullCircleAttackSwingScaleMultiplier = 1f;
         [SerializeField, Min(0.01f)] private float attackSwingMinRangeScale = 0.25f;
         [SerializeField, Min(0.01f)] private float attackSwingMaxRangeScale = 4f;
-        [SerializeField] private bool alternateAttackSwingVerticalFlip = true;
-        [SerializeField] private bool flipAttackSwingVisual = true;
-        [SerializeField] private bool firstAttackSwingUsesFlippedY;
-        [SerializeField] private bool resetAttackSwingAlternationOnEnable = true;
         [SerializeField] private bool logAttackSwingVfxScale;
         [SerializeField, HideInInspector] private int attackSwingScaleSettingsVersion;
 
@@ -99,7 +98,6 @@ namespace NeonBreaker.Player
 
         private Collider2D[] colliders;
         private SpriteRenderer[] spriteRenderers;
-        private int attackSwingSequence;
 
         private const int CurrentAttackSwingScaleSettingsVersion = 2;
 
@@ -165,14 +163,9 @@ namespace NeonBreaker.Player
 
         private void OnEnable()
         {
-            if (resetAttackSwingAlternationOnEnable)
-            {
-                attackSwingSequence = 0;
-            }
-
             if (meleeAttack != null)
             {
-                meleeAttack.AttackStarted += HandleAttackStarted;
+                meleeAttack.AttackSwingVfxRequested += HandleAttackSwingVfxRequested;
                 meleeAttack.AttackHit += HandleAttackHit;
             }
 
@@ -198,7 +191,7 @@ namespace NeonBreaker.Player
         {
             if (meleeAttack != null)
             {
-                meleeAttack.AttackStarted -= HandleAttackStarted;
+                meleeAttack.AttackSwingVfxRequested -= HandleAttackSwingVfxRequested;
                 meleeAttack.AttackHit -= HandleAttackHit;
             }
 
@@ -220,17 +213,15 @@ namespace NeonBreaker.Player
             }
         }
 
-        private void HandleAttackStarted()
+        private void HandleAttackSwingVfxRequested()
         {
             Play(attackSwingClip);
-            bool flipY = ShouldFlipAttackSwingY();
-            GetAttackSwingVfxTransform(flipY, out Vector3 position, out Quaternion rotation);
+            GetAttackSwingVfxTransform(out Vector3 position, out Quaternion rotation);
             AttackSwingVfxEntry attackSwing = ResolveAttackSwingVfx();
             GameObject swing = Spawn(attackSwing.Prefab, position, rotation, false, attackSwing.PoolKey);
             Vector3 scale = GetAttackSwingVfxScale();
             LogAttackSwingVfxScale(scale);
-            ApplyAttackSwingTransform(swing, position, rotation, scale, flipAttackSwingVisual && flipY);
-            attackSwingSequence++;
+            ApplyAttackSwingTransform(swing, position, rotation, scale);
         }
 
         private void HandleAttackHit(int hitCount)
@@ -408,24 +399,37 @@ namespace NeonBreaker.Player
             }
         }
 
-        private void GetAttackSwingVfxTransform(bool useAlternateSwing, out Vector3 position, out Quaternion rotation)
+        private void GetAttackSwingVfxTransform(out Vector3 position, out Quaternion rotation)
         {
             Vector2 direction = GetAimDirection();
-            Vector3 origin = meleeAttack != null ? meleeAttack.AttackOriginPosition : transform.position;
-            float forwardDistance = placeAttackSwingVfxByAttackRange
-                ? GetAttackSwingRange() * attackSwingRangePositionFactor
-                : attackSwingForwardOffset;
+            if (ShouldCenterAttackSwingVfx())
+            {
+                position = transform.position + attackSwingWorldOffset;
+            }
+            else
+            {
+                Vector3 origin = meleeAttack != null ? meleeAttack.AttackOriginPosition : transform.position;
+                float forwardDistance = placeAttackSwingVfxByAttackRange
+                    ? GetAttackSwingRange() * attackSwingRangePositionFactor
+                    : attackSwingForwardOffset;
 
-            position = origin + (Vector3)(direction * forwardDistance) + attackSwingWorldOffset;
+                position = origin + (Vector3)(direction * forwardDistance) + attackSwingWorldOffset;
+            }
 
             if (rotateAttackSwingVfxToAimDirection)
             {
-                float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg + GetAttackSwingRotationOffset(useAlternateSwing);
+                float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg + attackSwingRotationOffset;
                 rotation = Quaternion.Euler(0f, 0f, angle);
                 return;
             }
 
             rotation = transform.rotation;
+        }
+
+        private bool ShouldCenterAttackSwingVfx()
+        {
+            return centerFullCircleAttackSwingVfx
+                && IsFullCircleAttackSwing();
         }
 
         private Vector2 GetAimDirection()
@@ -437,16 +441,6 @@ namespace NeonBreaker.Player
 
             Vector2 right = transform.right;
             return right.sqrMagnitude > 0.0001f ? right.normalized : Vector2.right;
-        }
-
-        private float GetAttackSwingRotationOffset(bool useAlternateSwing)
-        {
-            if (useAlternateSwing && useAlternateAttackSwingRotationOffset)
-            {
-                return alternateAttackSwingRotationOffset;
-            }
-
-            return attackSwingRotationOffset;
         }
 
         private void GetDashVfxTransform(
@@ -524,14 +518,14 @@ namespace NeonBreaker.Player
             }
 
             float baseRange = GetAttackSwingBaseRange();
-            float rangeRatio = GetAttackSwingRange() / Mathf.Max(0.01f, baseRange);
+            float rangeRatio = GetAttackSwingRangeRatio(baseRange);
             float scaleMultiplier = Mathf.Lerp(1f, rangeRatio, attackSwingRangeScaleStrength);
             scaleMultiplier = Mathf.Clamp(
                 scaleMultiplier,
                 Mathf.Min(attackSwingMinRangeScale, attackSwingMaxRangeScale),
                 Mathf.Max(attackSwingMinRangeScale, attackSwingMaxRangeScale));
 
-            Vector3 axis = GetSafeAttackSwingRangeScaleAxis();
+            Vector3 axis = GetAttackSwingScaleAxis();
             return new Vector3(
                 scale.x * Mathf.Lerp(1f, scaleMultiplier, Mathf.Max(0f, axis.x)),
                 scale.y * Mathf.Lerp(1f, scaleMultiplier, Mathf.Max(0f, axis.y)),
@@ -557,9 +551,9 @@ namespace NeonBreaker.Player
 
             float baseRange = GetAttackSwingBaseRange();
             float effectiveRange = GetAttackSwingRange();
-            float rangeRatio = effectiveRange / Mathf.Max(0.01f, baseRange);
+            float rangeRatio = GetAttackSwingRangeRatio(baseRange);
             Debug.Log(
-                $"[PlayerPolishFeedback2D] Attack Swing VFX Scale. Base Range: {baseRange:0.###}, Effective Range: {effectiveRange:0.###}, Ratio: {rangeRatio:0.###}, Strength: {attackSwingRangeScaleStrength:0.###}, Axis: {GetSafeAttackSwingRangeScaleAxis()}, Final Scale: {finalScale}",
+                $"[PlayerPolishFeedback2D] Attack Swing VFX Scale. Base Range: {baseRange:0.###}, Effective Range: {effectiveRange:0.###}, Ratio: {rangeRatio:0.###}, Strength: {attackSwingRangeScaleStrength:0.###}, Axis: {GetAttackSwingScaleAxis()}, Final Scale: {finalScale}",
                 this);
         }
 
@@ -581,6 +575,39 @@ namespace NeonBreaker.Player
             }
 
             return attackSwingRangeScaleAxis;
+        }
+
+        private Vector3 GetAttackSwingScaleAxis()
+        {
+            if (IsFullCircleAttackSwing())
+            {
+                return fullCircleAttackSwingRangeScaleAxis.sqrMagnitude > 0.0001f
+                    ? fullCircleAttackSwingRangeScaleAxis
+                    : Vector3.one;
+            }
+
+            return GetSafeAttackSwingRangeScaleAxis();
+        }
+
+        private float GetAttackSwingRangeRatio(float baseRange)
+        {
+            float effectiveRange = GetAttackSwingRange();
+            if (IsFullCircleAttackSwing() && scaleFullCircleAttackSwingVfxByDiameter)
+            {
+                effectiveRange *= 2f;
+            }
+
+            float multiplier = IsFullCircleAttackSwing()
+                ? Mathf.Max(0.01f, fullCircleAttackSwingScaleMultiplier)
+                : 1f;
+
+            return effectiveRange * multiplier / Mathf.Max(0.01f, baseRange);
+        }
+
+        private bool IsFullCircleAttackSwing()
+        {
+            return meleeAttack != null
+                && meleeAttack.CurrentAttackEffectiveAngle >= fullCircleAttackAngleThreshold;
         }
 
         private void UpgradeAttackSwingScaleSettings()
@@ -638,17 +665,6 @@ namespace NeonBreaker.Player
             return scale * scaleMultiplier;
         }
 
-        private bool ShouldFlipAttackSwingY()
-        {
-            if (!alternateAttackSwingVerticalFlip)
-            {
-                return firstAttackSwingUsesFlippedY;
-            }
-
-            bool isOddSwing = attackSwingSequence % 2 == 1;
-            return firstAttackSwingUsesFlippedY ? !isOddSwing : isOddSwing;
-        }
-
         private AttackSwingVfxEntry ResolveAttackSwingVfx()
         {
             if (meleeAttack != null && attackSwingVfxByAnimationIndex != null)
@@ -667,7 +683,7 @@ namespace NeonBreaker.Player
             return new AttackSwingVfxEntry(attackSwingVfx, attackSwingVfxPoolKey);
         }
 
-        private void ApplyAttackSwingTransform(GameObject swing, Vector3 position, Quaternion rotation, Vector3 scale, bool flipY)
+        private void ApplyAttackSwingTransform(GameObject swing, Vector3 position, Quaternion rotation, Vector3 scale)
         {
             if (swing == null)
             {
@@ -684,13 +700,11 @@ namespace NeonBreaker.Player
             {
                 bool appliedVisualScale = pooledVfx.SetVisualScaleMultiplier(scale);
                 pooledVfx.LockWorldTransform(position, rotation, appliedVisualScale ? Vector3.one : scale);
-                pooledVfx.SetVisualVerticalFlip(flipY);
                 return;
             }
 
             swing.transform.SetPositionAndRotation(position, rotation);
             swing.transform.localScale = scale;
-            ApplyFallbackChildVisualFlip(swing, false, flipY);
         }
 
         private static void ApplyLockedVfxTransform(

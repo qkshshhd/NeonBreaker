@@ -8,6 +8,12 @@ namespace NeonBreaker.Dungeon
 {
     public sealed class TilemapDungeonGenerator : MonoBehaviour
     {
+        private enum GenerationMode
+        {
+            ProceduralTilemap,
+            TemplateRooms
+        }
+
         [Header("Tilemaps")]
         [SerializeField] private Tilemap floorTilemap;
         [SerializeField] private Tilemap wallTilemap;
@@ -20,6 +26,7 @@ namespace NeonBreaker.Dungeon
         [SerializeField] private RoomRunManager runManager;
 
         [Header("Generation")]
+        [SerializeField] private GenerationMode generationMode = GenerationMode.ProceduralTilemap;
         [SerializeField] private bool generateOnStart = true;
         [SerializeField] private bool useRandomSeed = true;
         [SerializeField] private int seed = 12345;
@@ -34,6 +41,11 @@ namespace NeonBreaker.Dungeon
         [SerializeField] private int doorThickness = 1;
         [SerializeField] private int roomTriggerPadding = 1;
 
+        [Header("Template Rooms")]
+        [SerializeField] private RoomTemplateSet roomTemplateSet;
+        [SerializeField] private bool fallbackToProceduralIfTemplateMissing = true;
+        [SerializeField] private int templateRoomSpacing = 8;
+
         private readonly List<RectInt> generatedRooms = new List<RectInt>();
         private readonly HashSet<Vector3Int> floorCells = new HashSet<Vector3Int>();
         private readonly HashSet<Vector3Int> wallCells = new HashSet<Vector3Int>();
@@ -43,6 +55,13 @@ namespace NeonBreaker.Dungeon
         private readonly List<Tilemap> doorTilemaps = new List<Tilemap>();
         private readonly List<TilemapCollider2D> doorColliders = new List<TilemapCollider2D>();
         private readonly List<BoxCollider2D> doorBlockers = new List<BoxCollider2D>();
+        private readonly List<RoomTemplateDoor2D> templateDoors = new List<RoomTemplateDoor2D>();
+        private readonly List<Vector3> doorWorldCenters = new List<Vector3>();
+        private readonly List<RoomTemplate2D> roomTemplateInstances = new List<RoomTemplate2D>();
+        private readonly List<List<Vector3>> roomTemplateSpawnPositions = new List<List<Vector3>>();
+        private readonly List<Vector3> roomTemplateCenters = new List<Vector3>();
+        private RoomDefinition[] activeRoomDefinitions;
+        private Transform templateRoomRoot;
         private Transform doorRoot;
         private Transform roomTriggerRoot;
         private bool subscribedToRunManager;
@@ -83,6 +102,30 @@ namespace NeonBreaker.Dungeon
         [ContextMenu("Generate Dungeon")]
         public void Generate()
         {
+            GenerateInternal(activeRoomDefinitions);
+        }
+
+        public void Generate(IReadOnlyList<RoomDefinition> roomDefinitions)
+        {
+            if (roomDefinitions == null)
+            {
+                activeRoomDefinitions = null;
+                GenerateInternal(null);
+                return;
+            }
+
+            activeRoomDefinitions = new RoomDefinition[roomDefinitions.Count];
+            for (int i = 0; i < roomDefinitions.Count; i++)
+            {
+                activeRoomDefinitions[i] = roomDefinitions[i];
+            }
+
+            roomCount = Mathf.Max(1, activeRoomDefinitions.Length);
+            GenerateInternal(activeRoomDefinitions);
+        }
+
+        private void GenerateInternal(IReadOnlyList<RoomDefinition> roomDefinitions)
+        {
             if (createTilemapsIfMissing)
             {
                 EnsureTilemaps();
@@ -107,8 +150,25 @@ namespace NeonBreaker.Dungeon
             }
 
             Clear();
-            BuildRoomLayout();
-            StampRoomsAndCorridors();
+
+            bool generatedFromTemplates = false;
+            if (generationMode == GenerationMode.TemplateRooms)
+            {
+                generatedFromTemplates = TryBuildTemplateRoomLayout(roomDefinitions);
+                if (!generatedFromTemplates && !fallbackToProceduralIfTemplateMissing)
+                {
+                    Debug.LogError("[TilemapDungeonGenerator] Template room generation failed. Assign a Room Template Set or enable fallback.", this);
+                    RestoreRandomState(previousState);
+                    return;
+                }
+            }
+
+            if (!generatedFromTemplates)
+            {
+                BuildRoomLayout();
+                StampRoomsAndCorridors();
+            }
+
             StampWalls();
             ApplyTiles();
             ApplyDoors();
@@ -120,10 +180,7 @@ namespace NeonBreaker.Dungeon
                 Debug.LogWarning("[TilemapDungeonGenerator] No door colliders were generated. Check corridor width, room count, and door settings.", this);
             }
 
-            if (!useRandomSeed)
-            {
-                UnityEngine.Random.state = previousState;
-            }
+            RestoreRandomState(previousState);
 
             DungeonGenerated?.Invoke(generatedRooms);
         }
@@ -131,11 +188,25 @@ namespace NeonBreaker.Dungeon
         public void Generate(int targetRoomCount)
         {
             roomCount = Mathf.Max(1, targetRoomCount);
-            Generate();
+            activeRoomDefinitions = null;
+            GenerateInternal(null);
+        }
+
+        private void RestoreRandomState(UnityEngine.Random.State previousState)
+        {
+            if (!useRandomSeed)
+            {
+                UnityEngine.Random.state = previousState;
+            }
         }
 
         public Vector3 GetRoomCenterWorld(int roomIndex)
         {
+            if (roomIndex >= 0 && roomIndex < roomTemplateCenters.Count)
+            {
+                return roomTemplateCenters[roomIndex];
+            }
+
             if (roomIndex < 0 || roomIndex >= generatedRooms.Count || floorTilemap == null)
             {
                 return transform.position;
@@ -143,6 +214,29 @@ namespace NeonBreaker.Dungeon
 
             Vector3Int cell = Vector3Int.RoundToInt((Vector3)generatedRooms[roomIndex].center);
             return floorTilemap.GetCellCenterWorld(cell);
+        }
+
+        public bool TryGetRoomSpawnPositions(int roomIndex, List<Vector3> results)
+        {
+            if (results == null)
+            {
+                return false;
+            }
+
+            results.Clear();
+            if (roomIndex < 0 || roomIndex >= roomTemplateSpawnPositions.Count)
+            {
+                return false;
+            }
+
+            List<Vector3> positions = roomTemplateSpawnPositions[roomIndex];
+            if (positions == null || positions.Count == 0)
+            {
+                return false;
+            }
+
+            results.AddRange(positions);
+            return true;
         }
 
         public bool TryGetRoomBounds(int roomIndex, out RectInt roomBounds)
@@ -164,6 +258,15 @@ namespace NeonBreaker.Dungeon
             if (floorTilemap == null || doorIndex < 0 || doorIndex >= doorCellGroups.Count)
             {
                 return false;
+            }
+
+            if (doorIndex < doorWorldCenters.Count)
+            {
+                worldPosition = doorWorldCenters[doorIndex];
+                if (worldPosition != Vector3.positiveInfinity)
+                {
+                    return true;
+                }
             }
 
             List<Vector3Int> cells = doorCellGroups[doorIndex];
@@ -286,9 +389,15 @@ namespace NeonBreaker.Dungeon
             doorCellGroups.Clear();
             roomEntranceDoorIndices.Clear();
             roomExitDoorIndices.Clear();
+            templateDoors.Clear();
+            doorWorldCenters.Clear();
+            roomTemplateInstances.Clear();
+            roomTemplateSpawnPositions.Clear();
+            roomTemplateCenters.Clear();
 
             floorTilemap.ClearAllTiles();
             wallTilemap.ClearAllTiles();
+            ClearGeneratedTemplateRooms();
             ClearGeneratedDoors();
             ClearGeneratedRoomTriggers();
         }
@@ -499,6 +608,102 @@ namespace NeonBreaker.Dungeon
                 && a.yMax > b.yMin;
         }
 
+        private bool TryBuildTemplateRoomLayout(IReadOnlyList<RoomDefinition> roomDefinitions)
+        {
+            if (roomTemplateSet == null)
+            {
+                return false;
+            }
+
+            int safeRoomCount = roomDefinitions != null && roomDefinitions.Count > 0
+                ? roomDefinitions.Count
+                : Mathf.Max(1, roomCount);
+
+            Transform parent = GetTemplateRoomRoot();
+            RectInt previousBounds = default;
+
+            for (int i = 0; i < safeRoomCount; i++)
+            {
+                RoomType roomType = GetTemplateRoomType(roomDefinitions, i);
+                RoomTemplate2D template = roomTemplateSet.Pick(roomType);
+                if (template == null)
+                {
+                    Debug.LogWarning($"[TilemapDungeonGenerator] No template found for room {i} ({roomType}).", this);
+                    return false;
+                }
+
+                RoomTemplate2D instance = Instantiate(template, parent);
+                instance.name = $"Room Template {i + 1} - {roomType}";
+
+                RectInt localBounds = instance.LocalBounds;
+                Vector2Int originCell = i == 0
+                    ? -Vector2Int.RoundToInt(localBounds.center)
+                    : new Vector2Int(previousBounds.xMax + Mathf.Max(1, templateRoomSpacing) - localBounds.xMin, -Mathf.RoundToInt(localBounds.center.y));
+
+                instance.transform.position = floorTilemap.CellToWorld(new Vector3Int(originCell.x, originCell.y, 0));
+
+                RectInt worldCellBounds = Offset(localBounds, originCell);
+                generatedRooms.Add(worldCellBounds);
+                roomTemplateInstances.Add(instance);
+                roomTemplateCenters.Add(instance.CenterWorldPosition);
+
+                List<Vector3> spawnPositions = new List<Vector3>();
+                instance.CollectSpawnPositions(spawnPositions);
+                roomTemplateSpawnPositions.Add(spawnPositions);
+
+                RegisterTemplateRoomDoors(i, instance);
+
+                if (i > 0)
+                {
+                    Vector3Int fromCell = floorTilemap.WorldToCell(roomTemplateInstances[i - 1].ExitWorldPosition);
+                    Vector3Int toCell = floorTilemap.WorldToCell(instance.EntranceWorldPosition);
+                    Vector2Int from = new Vector2Int(fromCell.x, fromCell.y);
+                    Vector2Int to = new Vector2Int(toCell.x, toCell.y);
+                    StampCorridor(from, to);
+                }
+
+                previousBounds = worldCellBounds;
+            }
+
+            return generatedRooms.Count > 0;
+        }
+
+        private static RectInt Offset(RectInt rect, Vector2Int offset)
+        {
+            return new RectInt(rect.x + offset.x, rect.y + offset.y, rect.width, rect.height);
+        }
+
+        private static RoomType GetTemplateRoomType(IReadOnlyList<RoomDefinition> roomDefinitions, int index)
+        {
+            if (roomDefinitions == null || index < 0 || index >= roomDefinitions.Count || roomDefinitions[index] == null)
+            {
+                return RoomType.Combat;
+            }
+
+            return roomDefinitions[index].RoomType;
+        }
+
+        private void RegisterTemplateRoomDoors(int roomIndex, RoomTemplate2D instance)
+        {
+            if (instance == null)
+            {
+                return;
+            }
+
+            int entranceIndex = AddTemplateDoor(instance.EntranceDoor, instance.EntranceWorldPosition);
+            int exitIndex = AddTemplateDoor(instance.ExitDoor, instance.ExitWorldPosition);
+            SetRoomEntranceDoorIndex(roomIndex, entranceIndex);
+            SetRoomExitDoorIndex(roomIndex, exitIndex);
+        }
+
+        private int AddTemplateDoor(RoomTemplateDoor2D door, Vector3 worldCenter)
+        {
+            doorCellGroups.Add(new List<Vector3Int>());
+            templateDoors.Add(door);
+            doorWorldCenters.Add(worldCenter);
+            return doorCellGroups.Count - 1;
+        }
+
         private static Vector2Int GetNextDirection(Vector2Int previousDirection)
         {
             Vector2Int[] directions =
@@ -619,6 +824,8 @@ namespace NeonBreaker.Dungeon
             }
 
             doorCellGroups.Add(cells);
+            templateDoors.Add(null);
+            doorWorldCenters.Add(Vector3.positiveInfinity);
             return doorCellGroups.Count - 1;
         }
 
@@ -758,6 +965,9 @@ namespace NeonBreaker.Dungeon
                 List<Vector3Int> cells = doorCellGroups[i];
                 if (cells == null || cells.Count == 0)
                 {
+                    doorTilemaps.Add(null);
+                    doorColliders.Add(null);
+                    doorBlockers.Add(null);
                     continue;
                 }
 
@@ -881,6 +1091,19 @@ namespace NeonBreaker.Dungeon
             return doorRoot;
         }
 
+        private Transform GetTemplateRoomRoot()
+        {
+            if (templateRoomRoot != null && templateRoomRoot.parent == transform)
+            {
+                return templateRoomRoot;
+            }
+
+            GameObject root = new GameObject("Generated Room Templates");
+            root.transform.SetParent(transform, false);
+            templateRoomRoot = root.transform;
+            return templateRoomRoot;
+        }
+
         private Transform GetRoomTriggerRoot()
         {
             if (roomTriggerRoot != null && roomTriggerRoot.parent == transform)
@@ -939,6 +1162,15 @@ namespace NeonBreaker.Dungeon
             }
         }
 
+        private void ClearGeneratedTemplateRooms()
+        {
+            if (templateRoomRoot != null)
+            {
+                DestroyGeneratedObject(templateRoomRoot.gameObject);
+                templateRoomRoot = null;
+            }
+        }
+
         private static void DestroyGeneratedObject(GameObject target)
         {
             target.transform.SetParent(null);
@@ -962,12 +1194,12 @@ namespace NeonBreaker.Dungeon
 
         private void SetDoorLocked(int doorIndex, bool locked)
         {
-            if (doorIndex < 0 || doorIndex >= doorColliders.Count)
+            if (doorIndex < 0 || doorIndex >= doorCellGroups.Count)
             {
                 return;
             }
 
-            TilemapCollider2D doorCollider = doorColliders[doorIndex];
+            TilemapCollider2D doorCollider = doorIndex < doorColliders.Count ? doorColliders[doorIndex] : null;
             if (doorCollider != null)
             {
                 doorCollider.enabled = locked;
@@ -985,6 +1217,11 @@ namespace NeonBreaker.Dungeon
                 {
                     renderer.enabled = locked;
                 }
+            }
+
+            if (doorIndex < templateDoors.Count && templateDoors[doorIndex] != null)
+            {
+                templateDoors[doorIndex].SetLocked(locked);
             }
         }
 

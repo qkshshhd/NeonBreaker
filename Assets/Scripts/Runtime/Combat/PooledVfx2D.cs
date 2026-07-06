@@ -41,6 +41,7 @@ namespace NeonBreaker.Combat
         private Quaternion lockedRotation;
         private Vector3 lockedScale;
         private bool hasLockedVisualFlip;
+        private bool hasLockedVisualScaleMultiplier;
         private bool lockedVisualFlipX;
         private bool lockedVisualFlipY;
         private Vector3 lockedVisualScaleMultiplier = Vector3.one;
@@ -110,6 +111,7 @@ namespace NeonBreaker.Combat
         {
             StopFallbackTimer();
             lockedVisualScaleMultiplier = Vector3.one;
+            hasLockedVisualScaleMultiplier = false;
             ApplyVisualFlip(false, false);
 
             hasLockedTransform = false;
@@ -128,6 +130,7 @@ namespace NeonBreaker.Combat
             StopFallbackTimer();
             hasLockedTransform = false;
             hasLockedVisualFlip = false;
+            hasLockedVisualScaleMultiplier = false;
             lockedVisualScaleMultiplier = Vector3.one;
 
             if (hideRenderersBeforeReturn)
@@ -198,6 +201,7 @@ namespace NeonBreaker.Combat
             }
 
             lockedVisualScaleMultiplier = SanitizeScaleMultiplier(scaleMultiplier);
+            hasLockedVisualScaleMultiplier = true;
             ApplyVisualFlip(lockedVisualFlipX, lockedVisualFlipY);
             return true;
         }
@@ -206,7 +210,7 @@ namespace NeonBreaker.Combat
         {
             if (!hasLockedTransform)
             {
-                if (hasLockedVisualFlip)
+                if (hasLockedVisualFlip || hasLockedVisualScaleMultiplier)
                 {
                     ApplyVisualFlip(lockedVisualFlipX, lockedVisualFlipY);
                 }
@@ -217,7 +221,7 @@ namespace NeonBreaker.Combat
             transform.SetPositionAndRotation(lockedPosition, lockedRotation);
             transform.localScale = lockedScale;
 
-            if (hasLockedVisualFlip)
+            if (hasLockedVisualFlip || hasLockedVisualScaleMultiplier)
             {
                 ApplyVisualFlip(lockedVisualFlipX, lockedVisualFlipY);
             }

@@ -1107,6 +1107,7 @@ MonoBehaviour:
   knockbackForce: 8
   knockbackDuration: 0.08
   maxHits: 24
+  maxHitBufferCapacity: 128
   drawDebugAttack: 1
   logAttackResult: 1
   playCombatFeedback: 1
@@ -1435,10 +1436,10 @@ MonoBehaviour:
     poolKey: {fileID: 11400000, guid: 0a97d72f20dd97e4e968f0dc7ec33813, type: 2}
   - prefab: {fileID: -2253911629886400664, guid: 4e6947b9e38b39c4aadb3c0dbd338ec4, type: 3}
     poolKey: {fileID: 11400000, guid: a0f76965fd716374e97afbf5545df626, type: 2}
-  - prefab: {fileID: 0}
-    poolKey: {fileID: 0}
-  - prefab: {fileID: 0}
-    poolKey: {fileID: 0}
+  - prefab: {fileID: 4137486548306516849, guid: c7e25fc7e9aafcd41868f5a9eaf2764a, type: 3}
+    poolKey: {fileID: 11400000, guid: 21c48fa4c12086b498229567fd210f9f, type: 2}
+  - prefab: {fileID: 6572383807574152734, guid: 949b99744e3b6f945905e0128d2334a9, type: 3}
+    poolKey: {fileID: 11400000, guid: c388b5a0d21ca4b4fa1449084536695b, type: 2}
   - prefab: {fileID: 0}
     poolKey: {fileID: 0}
   attackHitVfx: {fileID: 3756106986630792206, guid: 0651cfc8c7847834d98a54b9b9de5448, type: 3}
@@ -1468,24 +1469,23 @@ MonoBehaviour:
   dashEndVfxScale: {x: 1, y: 1, z: 1}
   rotateAttackSwingVfxToAimDirection: 1
   placeAttackSwingVfxByAttackRange: 1
+  centerFullCircleAttackSwingVfx: 1
+  fullCircleAttackAngleThreshold: 359
   attackSwingRangePositionFactor: 0.5
   attackSwingForwardOffset: 0.65
   attackSwingWorldOffset: {x: 0, y: 0, z: 0}
   attackSwingRotationOffset: -45
-  useAlternateAttackSwingRotationOffset: 1
-  alternateAttackSwingRotationOffset: 45
   scaleAttackSwingVfxByAttackRange: 1
   useMeleeAttackBaseRangeForSwingScale: 0
   attackSwingVfxBaseRange: 1.35
   attackSwingVfxBaseScale: {x: 1, y: 1, z: 1}
   attackSwingRangeScaleStrength: 1
   attackSwingRangeScaleAxis: {x: 1, y: 1, z: 1}
+  scaleFullCircleAttackSwingVfxByDiameter: 1
+  fullCircleAttackSwingRangeScaleAxis: {x: 1, y: 1, z: 1}
+  fullCircleAttackSwingScaleMultiplier: 1
   attackSwingMinRangeScale: 0.25
   attackSwingMaxRangeScale: 4
-  alternateAttackSwingVerticalFlip: 1
-  flipAttackSwingVisual: 1
-  firstAttackSwingUsesFlippedY: 0
-  resetAttackSwingAlternationOnEnable: 1
   logAttackSwingVfxScale: 1
   attackSwingScaleSettingsVersion: 2
   offsetImpactVfxPosition: 0
@@ -4590,6 +4590,16 @@ MonoBehaviour:
     prewarmCount: 0
     canExpand: 1
     inactiveRoot: {fileID: 0}
+  - key: {fileID: 11400000, guid: 21c48fa4c12086b498229567fd210f9f, type: 2}
+    prefab: {fileID: -4328707745457984594, guid: c7e25fc7e9aafcd41868f5a9eaf2764a, type: 3}
+    prewarmCount: 0
+    canExpand: 1
+    inactiveRoot: {fileID: 0}
+  - key: {fileID: 11400000, guid: c388b5a0d21ca4b4fa1449084536695b, type: 2}
+    prefab: {fileID: -5962052666142092475, guid: 949b99744e3b6f945905e0128d2334a9, type: 3}
+    prewarmCount: 0
+    canExpand: 1
+    inactiveRoot: {fileID: 0}
 --- !u!4 &525483392
 Transform:
   m_ObjectHideFlags: 0
@@ -4829,8 +4839,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: -490}
-  m_SizeDelta: {x: 100, y: 100}
+  m_AnchoredPosition: {x: 0, y: -489}
+  m_SizeDelta: {x: 400, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &540821859
 CanvasRenderer:
@@ -4853,14 +4863,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.63702667, g: 1, b: 0.2320754, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: -8745506591820970123, guid: d620c9969093cfb40882aac78bde872b, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -6443,8 +6453,8 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4294967295
-  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
+    rgba: 2885681151
+  m_fontColor: {r: 1, g: 1, b: 1, a: 0.67058825}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -6530,7 +6540,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: -520.6}
+  m_AnchoredPosition: {x: 0, y: -515}
   m_SizeDelta: {x: 200, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &789150835
@@ -8217,8 +8227,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -0, y: -490}
-  m_SizeDelta: {x: 100, y: 100}
+  m_AnchoredPosition: {x: 0, y: -489}
+  m_SizeDelta: {x: 400, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &1021847231
 CanvasRenderer:
@@ -8241,14 +8251,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Color: {r: 0, g: 0, b: 0, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: -8745506591820970123, guid: d620c9969093cfb40882aac78bde872b, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -9696,6 +9706,7 @@ MonoBehaviour:
   root: {fileID: 1078343036}
   mapRoot: {fileID: 1970465121}
   titleText: {fileID: 1652905181}
+  layoutMode: 0
   useDungeonLayout: 1
   preserveDungeonAspectRatio: 1
   centerCurrentRoom: 1
@@ -9704,7 +9715,12 @@ MonoBehaviour:
   fallbackMapSize: {x: 260, y: 170}
   mapPadding: {x: 24, y: 20}
   linearNodeSpacing: 44
+  stableNodeSpacing: {x: 44, y: 34}
+  stableVerticalLaneLimit: 2
+  stableVerticalTurnThreshold: 0.35
   nodeSize: 30
+  typeMarkerHeight: 3
+  typeGlyphSize: 12
   lineThickness: 4
   useOrthogonalConnectors: 1
   edgeSafePadding: 18
@@ -9724,6 +9740,8 @@ MonoBehaviour:
   rewardColor: {r: 1, g: 0.82, b: 0.28, a: 1}
   restColor: {r: 0.42, g: 1, b: 0.76, a: 1}
   bossColor: {r: 1, g: 0.18, b: 0.34, a: 1}
+  combatTypeColor: {r: 0.52, g: 0.7, b: 0.9, a: 1}
+  unknownTypeColor: {r: 0.45, g: 0.5, b: 0.6, a: 0.5}
   activeLineColor: {r: 0.38, g: 0.75, b: 0.9, a: 0.85}
   nextLineColor: {r: 0.36, g: 0.92, b: 1, a: 0.7}
   inactiveLineColor: {r: 0.16, g: 0.2, b: 0.28, a: 0.36}
@@ -10155,8 +10173,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: -490}
-  m_SizeDelta: {x: 200, y: 50}
+  m_AnchoredPosition: {x: 0, y: -489}
+  m_SizeDelta: {x: 200, y: 54.7294}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &1290103613
 CanvasRenderer:
@@ -11941,8 +11959,8 @@ MonoBehaviour:
   buildFallbackUiIfMissing: 1
   showSecondsText: 1
   invertFill: 1
-  readyColor: {r: 1, g: 0.35, b: 0.95, a: 1}
-  cooldownColor: {r: 0.45, g: 0.28, b: 0.62, a: 0.85}
+  readyColor: {r: 1, g: 1, b: 1, a: 1}
+  cooldownColor: {r: 0, g: 0, b: 0, a: 0.85}
   keyLabel: RMB
 --- !u!114 &1636804835
 MonoBehaviour:
@@ -14044,14 +14062,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0, g: 0, b: 0, a: 0.45882353}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: -7515214742534813092, guid: 19b95afd8433ea841975ac14787f1f3c, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1

@@ -9,6 +9,14 @@ namespace NeonBreaker.UI
 {
     public sealed class MinimapUI : MonoBehaviour
     {
+        private enum MinimapLayoutMode
+        {
+            StableProgression,
+            StableDungeonSteps,
+            ScaledDungeon,
+            Linear
+        }
+
         [Header("Sources")]
         [SerializeField] private RoomRunManager runManager;
         [SerializeField] private TilemapDungeonGenerator dungeonGenerator;
@@ -19,6 +27,7 @@ namespace NeonBreaker.UI
         [SerializeField] private TextMeshProUGUI titleText;
 
         [Header("Layout")]
+        [SerializeField] private MinimapLayoutMode layoutMode = MinimapLayoutMode.StableProgression;
         [SerializeField] private bool useDungeonLayout = true;
         [SerializeField] private bool preserveDungeonAspectRatio = true;
         [SerializeField] private bool centerCurrentRoom = true;
@@ -27,7 +36,12 @@ namespace NeonBreaker.UI
         [SerializeField] private Vector2 fallbackMapSize = new Vector2(260f, 170f);
         [SerializeField] private Vector2 mapPadding = new Vector2(24f, 20f);
         [SerializeField] private float linearNodeSpacing = 44f;
+        [SerializeField] private Vector2 stableNodeSpacing = new Vector2(44f, 34f);
+        [SerializeField, Min(0)] private int stableVerticalLaneLimit = 2;
+        [SerializeField, Range(0f, 1f)] private float stableVerticalTurnThreshold = 0.35f;
         [SerializeField] private float nodeSize = 18f;
+        [SerializeField, Min(0f)] private float typeMarkerHeight = 3f;
+        [SerializeField, Min(0f)] private float typeGlyphSize = 12f;
         [SerializeField] private float lineThickness = 4f;
         [SerializeField] private bool useOrthogonalConnectors = true;
         [SerializeField] private float edgeSafePadding = 10f;
@@ -51,6 +65,8 @@ namespace NeonBreaker.UI
         [SerializeField] private Color rewardColor = new Color(1f, 0.82f, 0.28f, 1f);
         [SerializeField] private Color restColor = new Color(0.42f, 1f, 0.76f, 1f);
         [SerializeField] private Color bossColor = new Color(1f, 0.18f, 0.34f, 1f);
+        [SerializeField] private Color combatTypeColor = new Color(0.52f, 0.7f, 0.9f, 1f);
+        [SerializeField] private Color unknownTypeColor = new Color(0.45f, 0.5f, 0.6f, 0.5f);
         [SerializeField] private Color activeLineColor = new Color(0.38f, 0.75f, 0.9f, 0.85f);
         [SerializeField] private Color nextLineColor = new Color(0.36f, 0.92f, 1f, 0.7f);
         [SerializeField] private Color inactiveLineColor = new Color(0.16f, 0.2f, 0.28f, 0.36f);
@@ -233,6 +249,21 @@ namespace NeonBreaker.UI
         {
             Vector2[] positions = new Vector2[roomCount];
 
+            switch (layoutMode)
+            {
+                case MinimapLayoutMode.StableProgression:
+                    return BuildStableProgressionPositions(roomCount);
+                case MinimapLayoutMode.StableDungeonSteps:
+                    return BuildStableDungeonStepPositions(roomCount);
+                case MinimapLayoutMode.Linear:
+                    for (int i = 0; i < roomCount; i++)
+                    {
+                        positions[i] = BuildLinearPosition(i, roomCount);
+                    }
+
+                    return positions;
+            }
+
             if (useDungeonLayout && dungeonGenerator != null && dungeonGenerator.GeneratedRooms.Count > 0)
             {
                 IReadOnlyList<RectInt> rooms = dungeonGenerator.GeneratedRooms;
@@ -281,6 +312,110 @@ namespace NeonBreaker.UI
             return positions;
         }
 
+        private Vector2[] BuildStableProgressionPositions(int roomCount)
+        {
+            Vector2[] positions = new Vector2[roomCount];
+            float spacingX = GetStableHorizontalSpacing();
+            float spacingY = GetStableVerticalSpacing();
+            float totalWidth = Mathf.Max(0, roomCount - 1) * spacingX;
+            int lane = 0;
+
+            for (int i = 0; i < roomCount; i++)
+            {
+                if (i > 0)
+                {
+                    lane = GetNextStableLane(i, lane);
+                }
+
+                positions[i] = new Vector2(i * spacingX - totalWidth * 0.5f, lane * spacingY);
+            }
+
+            return positions;
+        }
+
+        private Vector2[] BuildStableDungeonStepPositions(int roomCount)
+        {
+            Vector2[] positions = new Vector2[roomCount];
+            if (dungeonGenerator == null || dungeonGenerator.GeneratedRooms.Count <= 0)
+            {
+                for (int i = 0; i < roomCount; i++)
+                {
+                    positions[i] = BuildLinearPosition(i, roomCount);
+                }
+
+                return positions;
+            }
+
+            IReadOnlyList<RectInt> rooms = dungeonGenerator.GeneratedRooms;
+            int count = Mathf.Min(roomCount, rooms.Count);
+            float spacingX = GetStableHorizontalSpacing();
+            float spacingY = GetStableVerticalSpacing();
+
+            for (int i = 1; i < count; i++)
+            {
+                Vector2 delta = rooms[i].center - rooms[i - 1].center;
+                Vector2 step;
+                if (Mathf.Abs(delta.y) > Mathf.Abs(delta.x) * stableVerticalTurnThreshold)
+                {
+                    step = new Vector2(0f, Mathf.Sign(delta.y) * spacingY);
+                }
+                else
+                {
+                    step = new Vector2(Mathf.Sign(Mathf.Approximately(delta.x, 0f) ? 1f : delta.x) * spacingX, 0f);
+                }
+
+                positions[i] = positions[i - 1] + step;
+            }
+
+            for (int i = count; i < roomCount; i++)
+            {
+                positions[i] = positions[i - 1] + new Vector2(spacingX, 0f);
+            }
+
+            CenterPositions(positions);
+            return positions;
+        }
+
+        private int GetNextStableLane(int roomIndex, int currentLane)
+        {
+            if (dungeonGenerator == null || roomIndex <= 0 || roomIndex >= dungeonGenerator.GeneratedRooms.Count)
+            {
+                return currentLane;
+            }
+
+            IReadOnlyList<RectInt> rooms = dungeonGenerator.GeneratedRooms;
+            Vector2 delta = rooms[roomIndex].center - rooms[roomIndex - 1].center;
+            if (Mathf.Abs(delta.y) <= Mathf.Abs(delta.x) * stableVerticalTurnThreshold)
+            {
+                return currentLane;
+            }
+
+            int laneLimit = Mathf.Max(0, stableVerticalLaneLimit);
+            return Mathf.Clamp(currentLane + (delta.y >= 0f ? 1 : -1), -laneLimit, laneLimit);
+        }
+
+        private static void CenterPositions(Vector2[] positions)
+        {
+            if (positions == null || positions.Length == 0)
+            {
+                return;
+            }
+
+            Vector2 min = positions[0];
+            Vector2 max = positions[0];
+            for (int i = 1; i < positions.Length; i++)
+            {
+                min = Vector2.Min(min, positions[i]);
+                max = Vector2.Max(max, positions[i]);
+            }
+
+            Vector2 center = (min + max) * 0.5f;
+            for (int i = 0; i < positions.Length; i++)
+            {
+                positions[i] -= center;
+            }
+        }
+
         private Vector2[] BuildAspectPreservedDungeonPositions(
             int roomCount,
             IReadOnlyList<RectInt> rooms,
@@ -321,6 +456,16 @@ namespace NeonBreaker.UI
             float spacing = GetSafeLinearNodeSpacing(roomCount);
             float totalWidth = Mathf.Max(0, roomCount - 1) * spacing;
             return new Vector2(index * spacing - totalWidth * 0.5f, 0f);
+        }
+
+        private float GetStableHorizontalSpacing()
+        {
+            return stableNodeSpacing.x > 0.01f ? stableNodeSpacing.x : linearNodeSpacing;
+        }
+
+        private float GetStableVerticalSpacing()
+        {
+            return stableNodeSpacing.y > 0.01f ? stableNodeSpacing.y : linearNodeSpacing * 0.75f;
         }
 
         private MinimapConnection CreateConnection(int index, Vector2 from, Vector2 to)
@@ -364,16 +509,58 @@ namespace NeonBreaker.UI
             image.raycastTarget = false;
 
             RoomDefinition room = GetRoomDefinition(index);
+            Image marker = CreateNodeTypeMarker(rect);
+            TextMeshProUGUI glyph = CreateNodeTypeGlyph(rect);
             if (room != null && room.RoomType == RoomType.Reward)
             {
                 rect.localRotation = Quaternion.Euler(0f, 0f, 45f);
+                SetCounterRotation(glyph, rect);
             }
             else if (room != null && room.RoomType == RoomType.Boss)
             {
                 rect.sizeDelta = Vector2.one * (nodeSize * 1.22f);
             }
 
-            return new MinimapNode(rect, image);
+            return new MinimapNode(rect, image, marker, glyph);
+        }
+
+        private Image CreateNodeTypeMarker(RectTransform parent)
+        {
+            GameObject markerObject = CreateUiObject("Type Marker", parent);
+            RectTransform rect = markerObject.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0f);
+            rect.anchorMax = new Vector2(0.5f, 0f);
+            rect.pivot = new Vector2(0.5f, 0f);
+            rect.anchoredPosition = new Vector2(0f, 1f);
+            rect.sizeDelta = new Vector2(nodeSize * 0.72f, Mathf.Max(1f, typeMarkerHeight));
+
+            Image marker = markerObject.AddComponent<Image>();
+            marker.raycastTarget = false;
+            marker.color = combatTypeColor;
+            return marker;
+        }
+
+        private TextMeshProUGUI CreateNodeTypeGlyph(RectTransform parent)
+        {
+            TextMeshProUGUI glyph = CreateText(parent, "Type Glyph", string.Empty, Mathf.Max(1f, typeGlyphSize), FontStyles.Bold);
+            RectTransform rect = glyph.rectTransform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+            glyph.alignment = TextAlignmentOptions.Center;
+            glyph.raycastTarget = false;
+            return glyph;
+        }
+
+        private static void SetCounterRotation(TextMeshProUGUI glyph, RectTransform parent)
+        {
+            if (glyph == null || parent == null)
+            {
+                return;
+            }
+
+            glyph.rectTransform.localRotation = Quaternion.Inverse(parent.localRotation);
         }
 
         private void Refresh()
@@ -397,6 +584,8 @@ namespace NeonBreaker.UI
                 {
                     nodes[i].Image.color = GetNodeColor(i);
                 }
+
+                UpdateNodeTypeVisual(i);
             }
 
             for (int i = 0; i < connections.Count; i++)
@@ -452,6 +641,77 @@ namespace NeonBreaker.UI
                     return bossColor;
                 default:
                     return discoveredColor;
+            }
+        }
+
+        private void UpdateNodeTypeVisual(int index)
+        {
+            if (index < 0 || index >= nodes.Count)
+            {
+                return;
+            }
+
+            bool discovered = index >= 0 && index < discoveredRooms.Length && discoveredRooms[index];
+            bool visibleType = showFutureRooms || discovered;
+            RoomDefinition room = GetRoomDefinition(index);
+            Color typeColor = visibleType ? GetRoomTypeColor(room) : unknownTypeColor;
+            string glyph = visibleType ? GetRoomTypeGlyph(room) : "?";
+
+            if (nodes[index].TypeMarker != null)
+            {
+                nodes[index].TypeMarker.gameObject.SetActive(typeMarkerHeight > 0.01f);
+                nodes[index].TypeMarker.color = typeColor;
+            }
+
+            if (nodes[index].Glyph != null)
+            {
+                nodes[index].Glyph.gameObject.SetActive(typeGlyphSize > 0.01f);
+                nodes[index].Glyph.text = glyph;
+                nodes[index].Glyph.color = typeColor;
+            }
+        }
+
+        private Color GetRoomTypeColor(RoomDefinition room)
+        {
+            if (room == null)
+            {
+                return unknownTypeColor;
+            }
+
+            switch (room.RoomType)
+            {
+                case RoomType.Elite:
+                    return eliteColor;
+                case RoomType.Reward:
+                    return rewardColor;
+                case RoomType.Rest:
+                    return restColor;
+                case RoomType.Boss:
+                    return bossColor;
+                default:
+                    return combatTypeColor;
+            }
+        }
+
+        private static string GetRoomTypeGlyph(RoomDefinition room)
+        {
+            if (room == null)
+            {
+                return "?";
+            }
+
+            switch (room.RoomType)
+            {
+                case RoomType.Elite:
+                    return "!";
+                case RoomType.Reward:
+                    return "*";
+                case RoomType.Rest:
+                    return "+";
+                case RoomType.Boss:
+                    return "B";
+                default:
+                    return "";
             }
         }
 
@@ -890,11 +1150,15 @@ namespace NeonBreaker.UI
         {
             public readonly RectTransform Rect;
             public readonly Image Image;
+            public readonly Image TypeMarker;
+            public readonly TextMeshProUGUI Glyph;
 
-            public MinimapNode(RectTransform rect, Image image)
+            public MinimapNode(RectTransform rect, Image image, Image typeMarker, TextMeshProUGUI glyph)
             {
                 Rect = rect;
                 Image = image;
+                TypeMarker = typeMarker;
+                Glyph = glyph;
             }
         }
 

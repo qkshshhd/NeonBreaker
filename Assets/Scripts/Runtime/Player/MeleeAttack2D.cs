@@ -19,6 +19,7 @@ namespace NeonBreaker.Player
         [SerializeField] private float knockbackForce = 8f;
         [SerializeField] private float knockbackDuration = 0.08f;
         [SerializeField] private int maxHits = 24;
+        [SerializeField] private int maxHitBufferCapacity = 128;
         [SerializeField] private bool drawDebugAttack = true;
         [SerializeField] private bool logAttackResult = true;
         [SerializeField] private bool playCombatFeedback = true;
@@ -37,6 +38,7 @@ namespace NeonBreaker.Player
         private Coroutine attackRoutine;
 
         public event Action AttackStarted;
+        public event Action AttackSwingVfxRequested;
         public event Action<int> AttackHit;
 
         public float CooldownRemaining => Mathf.Max(0f, cooldownTimer);
@@ -49,6 +51,7 @@ namespace NeonBreaker.Player
         public float CurrentAttackStateDuration { get; private set; } = 0.2f;
         public float CurrentAttackBaseRange { get; private set; }
         public float CurrentAttackEffectiveRange { get; private set; }
+        public float CurrentAttackEffectiveAngle { get; private set; }
 
         private void Awake()
         {
@@ -57,7 +60,9 @@ namespace NeonBreaker.Player
                 attackOrigin = transform;
             }
 
-            hitBuffer = new Collider2D[Mathf.Max(1, maxHits)];
+            maxHits = Mathf.Max(1, maxHits);
+            maxHitBufferCapacity = Mathf.Max(maxHits, maxHitBufferCapacity);
+            hitBuffer = new Collider2D[maxHits];
             stats = GetComponentInParent<PlayerStats>();
             ApplyDefinition();
         }
@@ -108,8 +113,7 @@ namespace NeonBreaker.Player
             CurrentComboIndex = comboStep != null ? comboIndex : 0;
             CurrentAttackAnimationIndex = comboStep != null ? comboStep.AnimationIndex : 0;
             CurrentAttackStateDuration = GetAttackStateDuration(comboStep);
-            CurrentAttackBaseRange = GetBaseRange(comboStep, null);
-            CurrentAttackEffectiveRange = GetEffectiveRange(comboStep, null);
+            UpdateCurrentAttackWindow(comboStep, null);
             cooldownTimer = stats != null ? stats.GetAttackCooldown(GetAttackCooldown(comboStep)) : GetAttackCooldown(comboStep);
             AttackStarted?.Invoke();
 
@@ -137,6 +141,8 @@ namespace NeonBreaker.Player
             MeleeComboDefinition.HitWindow[] hitWindows = comboStep?.HitWindows;
             if (hitWindows == null || hitWindows.Length == 0)
             {
+                UpdateCurrentAttackWindow(comboStep, null);
+                AttackSwingVfxRequested?.Invoke();
                 int hitCount = PerformAttack(direction, comboStep, null);
                 AttackHit?.Invoke(hitCount);
                 attackRoutine = null;
@@ -164,6 +170,8 @@ namespace NeonBreaker.Player
                     damagedTargets.Clear();
                 }
 
+                UpdateCurrentAttackWindow(comboStep, hitWindow);
+                AttackSwingVfxRequested?.Invoke();
                 int hitCount = PerformAttack(direction, comboStep, hitWindow);
                 AttackHit?.Invoke(hitCount);
             }
@@ -181,7 +189,7 @@ namespace NeonBreaker.Player
             float effectiveRange = GetEffectiveRange(comboStep, hitWindow);
             float effectiveAngle = GetEffectiveAngle(comboStep, hitWindow);
             float effectiveKnockback = GetEffectiveKnockback(comboStep, hitWindow);
-            int count = Physics2D.OverlapCircle(origin, effectiveRange, filter, hitBuffer);
+            int count = QueryAttackCandidates(origin, effectiveRange, filter);
             int successfulHits = 0;
             bool anyCritical = false;
 
@@ -193,12 +201,12 @@ namespace NeonBreaker.Player
                     continue;
                 }
 
-                Vector2 targetPoint = hit.ClosestPoint(origin);
-                Vector2 toTarget = targetPoint - origin;
-                if (!IsInsideAttackCone(direction, toTarget, effectiveAngle))
+                if (!TryGetAttackHitPoint(hit, origin, direction, effectiveRange, effectiveAngle, out Vector2 targetPoint))
                 {
                     continue;
                 }
+
+                Vector2 toTarget = targetPoint - origin;
 
                 IDamageable damageable = FindComponentInParents<IDamageable>(hit);
                 if (damageable == null || !damageable.CanTakeDamage || damagedTargets.Contains(damageable))
@@ -243,6 +251,104 @@ namespace NeonBreaker.Player
             return successfulHits;
         }
 
+        private int QueryAttackCandidates(Vector2 origin, float effectiveRange, ContactFilter2D filter)
+        {
+            if (hitBuffer == null || hitBuffer.Length <= 0)
+            {
+                hitBuffer = new Collider2D[Mathf.Max(1, maxHits)];
+            }
+
+            int capacity = Mathf.Max(hitBuffer.Length, maxHits);
+            int maxCapacity = Mathf.Max(capacity, maxHitBufferCapacity);
+            if (hitBuffer.Length < capacity)
+            {
+                Array.Resize(ref hitBuffer, capacity);
+            }
+
+            int count;
+            while (true)
+            {
+                count = Physics2D.OverlapCircle(origin, effectiveRange, filter, hitBuffer);
+                if (count < hitBuffer.Length || hitBuffer.Length >= maxCapacity)
+                {
+                    return count;
+                }
+
+                int nextCapacity = Mathf.Min(hitBuffer.Length * 2, maxCapacity);
+                if (nextCapacity <= hitBuffer.Length)
+                {
+                    return count;
+                }
+
+                Array.Resize(ref hitBuffer, nextCapacity);
+            }
+        }
+
+        private bool TryGetAttackHitPoint(
+            Collider2D hit,
+            Vector2 origin,
+            Vector2 direction,
+            float effectiveRange,
+            float effectiveAngle,
+            out Vector2 hitPoint)
+        {
+            hitPoint = hit.ClosestPoint(origin);
+            if (IsInsideAttackShape(direction, hitPoint - origin, effectiveRange, effectiveAngle))
+            {
+                return true;
+            }
+
+            Bounds bounds = hit.bounds;
+            Vector2 boundsCenter = bounds.center;
+            Vector2 closestToCenter = hit.ClosestPoint(boundsCenter);
+            if (IsInsideAttackShape(direction, closestToCenter - origin, effectiveRange, effectiveAngle))
+            {
+                hitPoint = closestToCenter;
+                return true;
+            }
+
+            float projectedDistance = Mathf.Clamp(Vector2.Dot(boundsCenter - origin, direction), 0f, effectiveRange);
+            if (TrySampleAttackPoint(hit, origin, direction * projectedDistance, direction, effectiveRange, effectiveAngle, out hitPoint))
+            {
+                return true;
+            }
+
+            if (TrySampleAttackPoint(hit, origin, direction * effectiveRange, direction, effectiveRange, effectiveAngle, out hitPoint))
+            {
+                return true;
+            }
+
+            if (TrySampleAttackPoint(hit, origin, direction * (effectiveRange * 0.5f), direction, effectiveRange, effectiveAngle, out hitPoint))
+            {
+                return true;
+            }
+
+            if (effectiveAngle < 359f)
+            {
+                Vector2 left = Quaternion.Euler(0f, 0f, effectiveAngle * 0.5f) * direction;
+                Vector2 right = Quaternion.Euler(0f, 0f, -effectiveAngle * 0.5f) * direction;
+                return TrySampleAttackPoint(hit, origin, left * effectiveRange, direction, effectiveRange, effectiveAngle, out hitPoint)
+                    || TrySampleAttackPoint(hit, origin, right * effectiveRange, direction, effectiveRange, effectiveAngle, out hitPoint)
+                    || TrySampleAttackPoint(hit, origin, left * (effectiveRange * 0.5f), direction, effectiveRange, effectiveAngle, out hitPoint)
+                    || TrySampleAttackPoint(hit, origin, right * (effectiveRange * 0.5f), direction, effectiveRange, effectiveAngle, out hitPoint);
+            }
+
+            return false;
+        }
+
+        private bool TrySampleAttackPoint(
+            Collider2D hit,
+            Vector2 origin,
+            Vector2 sampleOffset,
+            Vector2 direction,
+            float effectiveRange,
+            float effectiveAngle,
+            out Vector2 hitPoint)
+        {
+            hitPoint = hit.ClosestPoint(origin + sampleOffset);
+            return IsInsideAttackShape(direction, hitPoint - origin, effectiveRange, effectiveAngle);
+        }
+
         private float RollDamage(MeleeComboDefinition.Step comboStep, MeleeComboDefinition.HitWindow hitWindow, out bool isCritical)
         {
             float damageMultiplier = GetDamageMultiplier(comboStep, hitWindow);
@@ -271,6 +377,23 @@ namespace NeonBreaker.Player
 
             float angle = Vector2.Angle(direction, toTarget.normalized);
             return angle <= effectiveAngle * 0.5f;
+        }
+
+        private bool IsInsideAttackShape(Vector2 direction, Vector2 toTarget, float effectiveRange, float effectiveAngle)
+        {
+            if (toTarget.sqrMagnitude <= 0.01f)
+            {
+                return true;
+            }
+
+            float rangeSlack = Mathf.Max(0.02f, effectiveRange * 0.01f);
+            float allowedRange = effectiveRange + rangeSlack;
+            if (toTarget.sqrMagnitude > allowedRange * allowedRange)
+            {
+                return false;
+            }
+
+            return IsInsideAttackCone(direction, toTarget, effectiveAngle);
         }
 
         private static T FindComponentInParents<T>(Collider2D source) where T : class
@@ -303,6 +426,7 @@ namespace NeonBreaker.Player
             hitLayers = definition.TargetLayers;
             CurrentAttackBaseRange = attackRange;
             CurrentAttackEffectiveRange = EffectiveAttackRange;
+            CurrentAttackEffectiveAngle = EffectiveAttackAngle;
         }
 
         private MeleeComboDefinition.Step GetCurrentComboStep()
@@ -403,6 +527,13 @@ namespace NeonBreaker.Player
 
             float baseKnockback = knockbackForce * multiplier;
             return stats != null ? stats.GetKnockback(baseKnockback) : baseKnockback;
+        }
+
+        private void UpdateCurrentAttackWindow(MeleeComboDefinition.Step comboStep, MeleeComboDefinition.HitWindow hitWindow)
+        {
+            CurrentAttackBaseRange = GetBaseRange(comboStep, hitWindow);
+            CurrentAttackEffectiveRange = GetEffectiveRange(comboStep, hitWindow);
+            CurrentAttackEffectiveAngle = GetEffectiveAngle(comboStep, hitWindow);
         }
 
         private void DrawAttackDebug(Vector2 origin, Vector2 direction, float range, float effectiveAngle, bool didHit)
