@@ -14,9 +14,29 @@ namespace NeonBreaker.Dungeon
             TemplateRooms
         }
 
+        private enum DoorSpriteFacing
+        {
+            Up,
+            Down,
+            Left,
+            Right
+        }
+
+        private enum StructuredRoomShape
+        {
+            Rectangle,
+            LShape,
+            TShape,
+            Cross,
+            BentCorridor,
+            Courtyard
+        }
+
         [Header("Tilemaps")]
         [SerializeField] private Tilemap floorTilemap;
         [SerializeField] private Tilemap wallTilemap;
+        [SerializeField] private Tilemap wallCollisionTilemap;
+        [SerializeField] private Tilemap decorationTilemap;
         [SerializeField] private bool createTilemapsIfMissing = true;
         [SerializeField] private bool addWallCollider = true;
         [SerializeField] private bool addDoorColliders = true;
@@ -41,6 +61,47 @@ namespace NeonBreaker.Dungeon
         [SerializeField] private int doorThickness = 1;
         [SerializeField] private int roomTriggerPadding = 1;
 
+        [Header("Room Dressing")]
+        [SerializeField] private bool decorateRooms = true;
+        [SerializeField] private bool randomizeFloorTileRotation = true;
+        [SerializeField] private bool randomizeDecorationTileRotation = true;
+        [SerializeField, Range(0f, 1f)] private float roomDecorationChance = 0.08f;
+        [SerializeField, Min(0)] private int decorationRoomPadding = 2;
+        [SerializeField, Min(0)] private int decorationCenterSafeRadius = 2;
+        [SerializeField] private bool varyRoomShapes = true;
+        [SerializeField] private bool useStructuredRoomShapes = true;
+        [SerializeField, Range(0f, 1f)] private float structuredRoomChance = 0.85f;
+        [SerializeField, Min(3)] private int structureArmMinWidth = 4;
+        [SerializeField, Min(0)] private int structureOuterPadding = 0;
+        [SerializeField] private bool allowEdgeCutsOnStructuredRooms = false;
+        [SerializeField, Range(0f, 1f)] private float cornerCutChance = 0.45f;
+        [SerializeField] private Vector2Int cornerCutSize = new Vector2Int(2, 3);
+        [SerializeField, Range(0f, 1f)] private float edgeCutChance = 0.45f;
+        [SerializeField, Min(0)] private int maxEdgeCutsPerRoom = 3;
+        [SerializeField] private Vector2Int edgeCutDepthRange = new Vector2Int(1, 3);
+        [SerializeField] private Vector2Int edgeCutLengthRange = new Vector2Int(2, 5);
+        [SerializeField, Min(0)] private int safeSpawnPaddingFromOutline = 2;
+
+        [Header("Room Connectivity")]
+        [SerializeField] private bool repairRoomConnectivity = true;
+        [SerializeField] private bool fillSmallInteriorVoids = true;
+        [SerializeField, Min(1)] private int maxInteriorVoidFillCells = 14;
+
+        [Header("Room Outline")]
+        [SerializeField] private bool useDirectionalOutlineTiles = true;
+        [SerializeField] private bool suppressDoorwayOuterCornerTiles = true;
+        [SerializeField] private bool collideOuterCornerTiles = false;
+        [SerializeField] private bool sealCornerCollisionGaps = true;
+        [SerializeField, Min(0)] private int wallCollisionOutwardOffset = 1;
+        [SerializeField] private bool swapInnerOuterCornerTiles = true;
+
+        [Header("Room Doors")]
+        [SerializeField] private bool rotateDoorTilesByDirection = true;
+        [SerializeField] private bool useDoorTilemapCollider;
+        [SerializeField] private DoorSpriteFacing doorSpriteDefaultFacing = DoorSpriteFacing.Up;
+        [SerializeField, Min(0)] private int doorBlockerSidePaddingCells = 2;
+        [SerializeField, Min(0f)] private float doorBlockerDepthPaddingCells = 0.5f;
+
         [Header("Template Rooms")]
         [SerializeField] private RoomTemplateSet roomTemplateSet;
         [SerializeField] private bool fallbackToProceduralIfTemplateMissing = true;
@@ -49,7 +110,11 @@ namespace NeonBreaker.Dungeon
         private readonly List<RectInt> generatedRooms = new List<RectInt>();
         private readonly HashSet<Vector3Int> floorCells = new HashSet<Vector3Int>();
         private readonly HashSet<Vector3Int> wallCells = new HashSet<Vector3Int>();
+        private readonly List<List<Vector3Int>> roomFloorCells = new List<List<Vector3Int>>();
         private readonly List<List<Vector3Int>> doorCellGroups = new List<List<Vector3Int>>();
+        private readonly List<Vector2Int> doorDirections = new List<Vector2Int>();
+        private readonly List<Vector2Int> doorCenters = new List<Vector2Int>();
+        private readonly List<Vector2Int> doorWidthOffsetRanges = new List<Vector2Int>();
         private readonly List<int> roomEntranceDoorIndices = new List<int>();
         private readonly List<int> roomExitDoorIndices = new List<int>();
         private readonly List<Tilemap> doorTilemaps = new List<Tilemap>();
@@ -167,10 +232,13 @@ namespace NeonBreaker.Dungeon
             {
                 BuildRoomLayout();
                 StampRoomsAndCorridors();
+                RepairProceduralRoomConnectivity();
+                FillSmallInteriorVoids();
             }
 
             StampWalls();
             ApplyTiles();
+            ApplyRoomDecorations();
             ApplyDoors();
             ApplyRoomTriggers();
             LockAllDoors();
@@ -216,6 +284,106 @@ namespace NeonBreaker.Dungeon
             return floorTilemap.GetCellCenterWorld(cell);
         }
 
+        public Vector3 GetRoomRewardWorldPosition(int roomIndex)
+        {
+            return TryGetSafeRoomWorldPosition(roomIndex, out Vector3 position)
+                ? position
+                : GetRoomCenterWorld(roomIndex);
+        }
+
+        public bool TryGetSafeRoomWorldPosition(int roomIndex, out Vector3 position)
+        {
+            position = GetRoomCenterWorld(roomIndex);
+
+            if (floorTilemap == null || roomIndex < 0 || roomIndex >= roomFloorCells.Count)
+            {
+                return false;
+            }
+
+            List<Vector3Int> cells = roomFloorCells[roomIndex];
+            if (cells == null || cells.Count == 0)
+            {
+                return false;
+            }
+
+            Vector2 center = roomIndex < generatedRooms.Count ? generatedRooms[roomIndex].center : Vector2.zero;
+            int padding = Mathf.Max(0, safeSpawnPaddingFromOutline);
+            for (int currentPadding = padding; currentPadding >= 0; currentPadding--)
+            {
+                bool found = false;
+                float bestDistance = float.MaxValue;
+                Vector3Int bestCell = cells[0];
+
+                for (int i = 0; i < cells.Count; i++)
+                {
+                    Vector3Int cell = cells[i];
+                    if (!HasFloorArea(cell, currentPadding))
+                    {
+                        continue;
+                    }
+
+                    Vector2 cellPosition = new Vector2(cell.x + 0.5f, cell.y + 0.5f);
+                    float distance = (cellPosition - center).sqrMagnitude;
+                    if (!found || distance < bestDistance)
+                    {
+                        found = true;
+                        bestDistance = distance;
+                        bestCell = cell;
+                    }
+                }
+
+                if (found)
+                {
+                    position = floorTilemap.GetCellCenterWorld(bestCell);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public bool TryGetRoomSafeSpawnPositions(int roomIndex, List<Vector3> results)
+        {
+            if (results == null)
+            {
+                return false;
+            }
+
+            results.Clear();
+
+            if (floorTilemap == null || roomIndex < 0 || roomIndex >= roomFloorCells.Count)
+            {
+                return false;
+            }
+
+            List<Vector3Int> cells = roomFloorCells[roomIndex];
+            if (cells == null || cells.Count == 0)
+            {
+                return false;
+            }
+
+            int padding = Mathf.Max(0, safeSpawnPaddingFromOutline);
+            for (int currentPadding = padding; currentPadding >= 0; currentPadding--)
+            {
+                results.Clear();
+                for (int i = 0; i < cells.Count; i++)
+                {
+                    Vector3Int cell = cells[i];
+                    if (HasFloorArea(cell, currentPadding))
+                    {
+                        results.Add(floorTilemap.GetCellCenterWorld(cell));
+                    }
+                }
+
+                if (results.Count > 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         public bool TryGetRoomSpawnPositions(int roomIndex, List<Vector3> results)
         {
             if (results == null)
@@ -239,6 +407,27 @@ namespace NeonBreaker.Dungeon
             return true;
         }
 
+        private bool HasFloorArea(Vector3Int centerCell, int padding)
+        {
+            if (padding <= 0)
+            {
+                return floorCells.Contains(centerCell);
+            }
+
+            for (int x = -padding; x <= padding; x++)
+            {
+                for (int y = -padding; y <= padding; y++)
+                {
+                    if (!floorCells.Contains(new Vector3Int(centerCell.x + x, centerCell.y + y, 0)))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
         public bool TryGetRoomBounds(int roomIndex, out RectInt roomBounds)
         {
             if (roomIndex < 0 || roomIndex >= generatedRooms.Count)
@@ -248,6 +437,38 @@ namespace NeonBreaker.Dungeon
             }
 
             roomBounds = generatedRooms[roomIndex];
+            return true;
+        }
+
+        public bool TryGetRoomFloorBounds(int roomIndex, out RectInt roomBounds)
+        {
+            if (roomIndex < 0 || roomIndex >= roomFloorCells.Count)
+            {
+                return TryGetRoomBounds(roomIndex, out roomBounds);
+            }
+
+            List<Vector3Int> cells = roomFloorCells[roomIndex];
+            if (cells == null || cells.Count == 0)
+            {
+                return TryGetRoomBounds(roomIndex, out roomBounds);
+            }
+
+            Vector3Int first = cells[0];
+            int xMin = first.x;
+            int yMin = first.y;
+            int xMax = first.x + 1;
+            int yMax = first.y + 1;
+
+            for (int i = 1; i < cells.Count; i++)
+            {
+                Vector3Int cell = cells[i];
+                xMin = Mathf.Min(xMin, cell.x);
+                yMin = Mathf.Min(yMin, cell.y);
+                xMax = Mathf.Max(xMax, cell.x + 1);
+                yMax = Mathf.Max(yMax, cell.y + 1);
+            }
+
+            roomBounds = new RectInt(xMin, yMin, xMax - xMin, yMax - yMin);
             return true;
         }
 
@@ -343,6 +564,18 @@ namespace NeonBreaker.Dungeon
                 wallTilemap = CreateTilemap(grid.transform, "Wall Tilemap", 1);
             }
 
+            if (addWallCollider && wallCollisionTilemap == null)
+            {
+                wallCollisionTilemap = CreateTilemap(grid.transform, "Wall Collision Tilemap", -10);
+            }
+
+            SetTilemapRendererVisible(wallCollisionTilemap, false);
+
+            if (decorationTilemap == null)
+            {
+                decorationTilemap = CreateTilemap(grid.transform, "Decoration Tilemap", 2);
+            }
+
             if (addWallCollider)
             {
                 EnsureWallCollider();
@@ -367,18 +600,44 @@ namespace NeonBreaker.Dungeon
             return tilemap;
         }
 
-        private void EnsureWallCollider()
+        private static void SetTilemapRendererVisible(Tilemap tilemap, bool visible)
         {
-            if (wallTilemap == null)
+            if (tilemap == null)
             {
                 return;
             }
 
-            TilemapCollider2D tilemapCollider = wallTilemap.GetComponent<TilemapCollider2D>();
+            TilemapRenderer renderer = tilemap.GetComponent<TilemapRenderer>();
+            if (renderer != null)
+            {
+                renderer.enabled = visible;
+            }
+        }
+
+        private void EnsureWallCollider()
+        {
+            Tilemap colliderTilemap = wallCollisionTilemap != null ? wallCollisionTilemap : wallTilemap;
+            if (colliderTilemap == null)
+            {
+                return;
+            }
+
+            if (wallTilemap != null && wallTilemap != colliderTilemap)
+            {
+                TilemapCollider2D visualCollider = wallTilemap.GetComponent<TilemapCollider2D>();
+                if (visualCollider != null)
+                {
+                    visualCollider.enabled = false;
+                }
+            }
+
+            TilemapCollider2D tilemapCollider = colliderTilemap.GetComponent<TilemapCollider2D>();
             if (tilemapCollider == null)
             {
-                tilemapCollider = wallTilemap.gameObject.AddComponent<TilemapCollider2D>();
+                tilemapCollider = colliderTilemap.gameObject.AddComponent<TilemapCollider2D>();
             }
+
+            tilemapCollider.enabled = true;
         }
 
         private void Clear()
@@ -386,7 +645,11 @@ namespace NeonBreaker.Dungeon
             generatedRooms.Clear();
             floorCells.Clear();
             wallCells.Clear();
+            roomFloorCells.Clear();
             doorCellGroups.Clear();
+            doorDirections.Clear();
+            doorCenters.Clear();
+            doorWidthOffsetRanges.Clear();
             roomEntranceDoorIndices.Clear();
             roomExitDoorIndices.Clear();
             templateDoors.Clear();
@@ -397,6 +660,14 @@ namespace NeonBreaker.Dungeon
 
             floorTilemap.ClearAllTiles();
             wallTilemap.ClearAllTiles();
+            if (wallCollisionTilemap != null)
+            {
+                wallCollisionTilemap.ClearAllTiles();
+            }
+            if (decorationTilemap != null)
+            {
+                decorationTilemap.ClearAllTiles();
+            }
             ClearGeneratedTemplateRooms();
             ClearGeneratedDoors();
             ClearGeneratedRoomTriggers();
@@ -608,6 +879,429 @@ namespace NeonBreaker.Dungeon
                 && a.yMax > b.yMin;
         }
 
+        private readonly struct RoomShapeMask
+        {
+            private enum JunctionDirection
+            {
+                North,
+                South,
+                East,
+                West
+            }
+
+            private enum EdgeSide
+            {
+                Bottom,
+                Top,
+                Left,
+                Right
+            }
+
+            private readonly struct EdgeCut
+            {
+                private readonly EdgeSide side;
+                private readonly int start;
+                private readonly int length;
+                private readonly int depth;
+
+                public EdgeCut(EdgeSide side, int start, int length, int depth)
+                {
+                    this.side = side;
+                    this.start = start;
+                    this.length = length;
+                    this.depth = depth;
+                }
+
+                public bool Contains(RectInt room, int x, int y)
+                {
+                    switch (side)
+                    {
+                        case EdgeSide.Bottom:
+                            return x >= room.xMin + start
+                                && x < room.xMin + start + length
+                                && y >= room.yMin
+                                && y < room.yMin + depth;
+                        case EdgeSide.Top:
+                            return x >= room.xMin + start
+                                && x < room.xMin + start + length
+                                && y < room.yMax
+                                && y >= room.yMax - depth;
+                        case EdgeSide.Left:
+                            return y >= room.yMin + start
+                                && y < room.yMin + start + length
+                                && x >= room.xMin
+                                && x < room.xMin + depth;
+                        case EdgeSide.Right:
+                            return y >= room.yMin + start
+                                && y < room.yMin + start + length
+                                && x < room.xMax
+                                && x >= room.xMax - depth;
+                        default:
+                            return false;
+                    }
+                }
+            }
+
+            private readonly RectInt room;
+            private readonly bool cutBottomLeft;
+            private readonly bool cutBottomRight;
+            private readonly bool cutTopLeft;
+            private readonly bool cutTopRight;
+            private readonly int cutWidth;
+            private readonly int cutHeight;
+            private readonly EdgeCut[] edgeCuts;
+            private readonly StructuredRoomShape structuredShape;
+            private readonly JunctionDirection structuredDirection;
+            private readonly int armWidth;
+            private readonly int outerPadding;
+            private readonly RectInt innerHole;
+            private readonly bool hasInnerHole;
+
+            private RoomShapeMask(
+                RectInt room,
+                bool cutBottomLeft,
+                bool cutBottomRight,
+                bool cutTopLeft,
+                bool cutTopRight,
+                int cutWidth,
+                int cutHeight,
+                EdgeCut[] edgeCuts,
+                StructuredRoomShape structuredShape,
+                JunctionDirection structuredDirection,
+                int armWidth,
+                int outerPadding,
+                RectInt innerHole,
+                bool hasInnerHole)
+            {
+                this.room = room;
+                this.cutBottomLeft = cutBottomLeft;
+                this.cutBottomRight = cutBottomRight;
+                this.cutTopLeft = cutTopLeft;
+                this.cutTopRight = cutTopRight;
+                this.cutWidth = cutWidth;
+                this.cutHeight = cutHeight;
+                this.edgeCuts = edgeCuts;
+                this.structuredShape = structuredShape;
+                this.structuredDirection = structuredDirection;
+                this.armWidth = armWidth;
+                this.outerPadding = outerPadding;
+                this.innerHole = innerHole;
+                this.hasInnerHole = hasInnerHole;
+            }
+
+            public static RoomShapeMask Create(
+                RectInt room,
+                bool enabled,
+                bool useStructuredShapes,
+                float structuredChance,
+                int requestedArmWidth,
+                int requestedOuterPadding,
+                bool allowCutsOnStructuredRooms,
+                float cornerChance,
+                Vector2Int cornerSize,
+                float edgeChance,
+                int maxEdgeCuts,
+                Vector2Int edgeDepthRange,
+                Vector2Int edgeLengthRange)
+            {
+                if (!enabled)
+                {
+                    return new RoomShapeMask(
+                        room,
+                        false,
+                        false,
+                        false,
+                        false,
+                        0,
+                        0,
+                        null,
+                        StructuredRoomShape.Rectangle,
+                        JunctionDirection.North,
+                        0,
+                        0,
+                        default,
+                        false);
+                }
+
+                bool useStructured = useStructuredShapes
+                    && structuredChance > 0f
+                    && UnityEngine.Random.value < structuredChance
+                    && room.width >= 8
+                    && room.height >= 8;
+
+                StructuredRoomShape structuredShape = useStructured
+                    ? PickStructuredShape(room)
+                    : StructuredRoomShape.Rectangle;
+                JunctionDirection structuredDirection = (JunctionDirection)UnityEngine.Random.Range(0, 4);
+                int maxArmWidth = Mathf.Max(3, Mathf.Min(room.width, room.height) - 2);
+                int armWidth = Mathf.Clamp(requestedArmWidth + UnityEngine.Random.Range(0, 2), 3, maxArmWidth);
+                int outerPadding = Mathf.Clamp(requestedOuterPadding, 0, Mathf.Max(0, Mathf.Min(room.width, room.height) / 4));
+                RectInt innerHole = CreateInnerHole(room, armWidth);
+                bool hasInnerHole = structuredShape == StructuredRoomShape.Courtyard && innerHole.width > 0 && innerHole.height > 0;
+                bool useLegacyCuts = !useStructured || allowCutsOnStructuredRooms;
+                int width = Mathf.Clamp(cornerSize.x, 1, Mathf.Max(1, room.width / 3));
+                int height = Mathf.Clamp(cornerSize.y, 1, Mathf.Max(1, room.height / 3));
+                return new RoomShapeMask(
+                    room,
+                    useLegacyCuts && cornerChance > 0f && UnityEngine.Random.value < cornerChance,
+                    useLegacyCuts && cornerChance > 0f && UnityEngine.Random.value < cornerChance,
+                    useLegacyCuts && cornerChance > 0f && UnityEngine.Random.value < cornerChance,
+                    useLegacyCuts && cornerChance > 0f && UnityEngine.Random.value < cornerChance,
+                    width,
+                    height,
+                    useLegacyCuts ? CreateEdgeCuts(room, edgeChance, maxEdgeCuts, edgeDepthRange, edgeLengthRange) : null,
+                    structuredShape,
+                    structuredDirection,
+                    armWidth,
+                    outerPadding,
+                    innerHole,
+                    hasInnerHole);
+            }
+
+            public bool Contains(int x, int y)
+            {
+                if (!ContainsStructuredShape(x, y))
+                {
+                    return false;
+                }
+
+                int leftDistance = x - room.xMin;
+                int rightDistance = room.xMax - 1 - x;
+                int bottomDistance = y - room.yMin;
+                int topDistance = room.yMax - 1 - y;
+
+                if (cutBottomLeft && leftDistance < cutWidth && bottomDistance < cutHeight)
+                {
+                    return false;
+                }
+
+                if (cutBottomRight && rightDistance < cutWidth && bottomDistance < cutHeight)
+                {
+                    return false;
+                }
+
+                if (cutTopLeft && leftDistance < cutWidth && topDistance < cutHeight)
+                {
+                    return false;
+                }
+
+                if (cutTopRight && rightDistance < cutWidth && topDistance < cutHeight)
+                {
+                    return false;
+                }
+
+                if (edgeCuts != null)
+                {
+                    for (int i = 0; i < edgeCuts.Length; i++)
+                    {
+                        if (edgeCuts[i].Contains(room, x, y))
+                        {
+                            return false;
+                        }
+                    }
+                }
+
+                return true;
+            }
+
+            private bool ContainsStructuredShape(int x, int y)
+            {
+                int localX = x - room.xMin;
+                int localY = y - room.yMin;
+                int width = room.width;
+                int height = room.height;
+                int padding = outerPadding;
+
+                if (localX < padding || localX >= width - padding || localY < padding || localY >= height - padding)
+                {
+                    return structuredShape == StructuredRoomShape.Rectangle;
+                }
+
+                int horizontalStart = Mathf.Max(padding, (width - armWidth) / 2);
+                int horizontalEnd = Mathf.Min(width - padding, horizontalStart + armWidth);
+                int verticalStart = Mathf.Max(padding, (height - armWidth) / 2);
+                int verticalEnd = Mathf.Min(height - padding, verticalStart + armWidth);
+
+                bool centerColumn = localX >= horizontalStart && localX < horizontalEnd;
+                bool centerRow = localY >= verticalStart && localY < verticalEnd;
+                bool bottomBand = localY < padding + armWidth;
+                bool topBand = localY >= height - padding - armWidth;
+                bool leftBand = localX < padding + armWidth;
+                bool rightBand = localX >= width - padding - armWidth;
+
+                switch (structuredShape)
+                {
+                    case StructuredRoomShape.LShape:
+                        return ContainsLShape(leftBand, rightBand, bottomBand, topBand);
+                    case StructuredRoomShape.TShape:
+                        return ContainsTShape(centerColumn, centerRow, leftBand, rightBand, bottomBand, topBand);
+                    case StructuredRoomShape.Cross:
+                        return centerColumn || centerRow;
+                    case StructuredRoomShape.BentCorridor:
+                        return ContainsBentCorridor(localX, localY, centerColumn, centerRow);
+                    case StructuredRoomShape.Courtyard:
+                        return !hasInnerHole || !innerHole.Contains(new Vector2Int(x, y));
+                    default:
+                        return true;
+                }
+            }
+
+            private bool ContainsLShape(bool leftBand, bool rightBand, bool bottomBand, bool topBand)
+            {
+                switch (structuredDirection)
+                {
+                    case JunctionDirection.North:
+                        return leftBand || topBand;
+                    case JunctionDirection.South:
+                        return rightBand || bottomBand;
+                    case JunctionDirection.East:
+                        return rightBand || topBand;
+                    default:
+                        return leftBand || bottomBand;
+                }
+            }
+
+            private bool ContainsTShape(
+                bool centerColumn,
+                bool centerRow,
+                bool leftBand,
+                bool rightBand,
+                bool bottomBand,
+                bool topBand)
+            {
+                switch (structuredDirection)
+                {
+                    case JunctionDirection.North:
+                        return centerColumn || topBand;
+                    case JunctionDirection.South:
+                        return centerColumn || bottomBand;
+                    case JunctionDirection.East:
+                        return centerRow || rightBand;
+                    default:
+                        return centerRow || leftBand;
+                }
+            }
+
+            private bool ContainsBentCorridor(int localX, int localY, bool centerColumn, bool centerRow)
+            {
+                bool northHalf = localY >= room.height / 2;
+                bool southHalf = localY <= room.height / 2;
+                bool eastHalf = localX >= room.width / 2;
+                bool westHalf = localX <= room.width / 2;
+                bool elbow = Mathf.Abs(localX - room.width / 2) <= armWidth / 2
+                    && Mathf.Abs(localY - room.height / 2) <= armWidth / 2;
+
+                switch (structuredDirection)
+                {
+                    case JunctionDirection.North:
+                        return (centerColumn && northHalf) || (centerRow && eastHalf) || elbow;
+                    case JunctionDirection.South:
+                        return (centerColumn && southHalf) || (centerRow && westHalf) || elbow;
+                    case JunctionDirection.East:
+                        return (centerRow && eastHalf) || (centerColumn && southHalf) || elbow;
+                    default:
+                        return (centerRow && westHalf) || (centerColumn && northHalf) || elbow;
+                }
+            }
+
+            private static StructuredRoomShape PickStructuredShape(RectInt room)
+            {
+                if (room.width < 10 || room.height < 10)
+                {
+                    return UnityEngine.Random.value < 0.55f
+                        ? StructuredRoomShape.LShape
+                        : StructuredRoomShape.TShape;
+                }
+
+                int roll = UnityEngine.Random.Range(0, 100);
+                if (roll < 24)
+                {
+                    return StructuredRoomShape.LShape;
+                }
+
+                if (roll < 46)
+                {
+                    return StructuredRoomShape.TShape;
+                }
+
+                if (roll < 65)
+                {
+                    return StructuredRoomShape.BentCorridor;
+                }
+
+                if (roll < 82)
+                {
+                    return StructuredRoomShape.Cross;
+                }
+
+                if (roll < 94)
+                {
+                    return StructuredRoomShape.Courtyard;
+                }
+
+                return StructuredRoomShape.Rectangle;
+            }
+
+            private static RectInt CreateInnerHole(RectInt room, int armWidth)
+            {
+                int holeWidth = Mathf.Clamp(room.width / 3, 2, Mathf.Max(2, room.width - armWidth * 2));
+                int holeHeight = Mathf.Clamp(room.height / 3, 2, Mathf.Max(2, room.height - armWidth * 2));
+                if (holeWidth <= 1 || holeHeight <= 1)
+                {
+                    return default;
+                }
+
+                int holeX = room.xMin + (room.width - holeWidth) / 2;
+                int holeY = room.yMin + (room.height - holeHeight) / 2;
+                return new RectInt(holeX, holeY, holeWidth, holeHeight);
+            }
+
+            private static EdgeCut[] CreateEdgeCuts(
+                RectInt room,
+                float chance,
+                int maxCuts,
+                Vector2Int depthRange,
+                Vector2Int lengthRange)
+            {
+                if (chance <= 0f || maxCuts <= 0)
+                {
+                    return null;
+                }
+
+                List<EdgeCut> cuts = null;
+                int attempts = Mathf.Max(1, maxCuts);
+                for (int i = 0; i < attempts; i++)
+                {
+                    if (UnityEngine.Random.value > chance)
+                    {
+                        continue;
+                    }
+
+                    EdgeSide side = (EdgeSide)UnityEngine.Random.Range(0, 4);
+                    int axisLength = side == EdgeSide.Bottom || side == EdgeSide.Top ? room.width : room.height;
+                    int maxDepth = side == EdgeSide.Bottom || side == EdgeSide.Top
+                        ? Mathf.Max(1, room.height / 4)
+                        : Mathf.Max(1, room.width / 4);
+
+                    int minLength = Mathf.Clamp(Mathf.Min(lengthRange.x, lengthRange.y), 1, Mathf.Max(1, axisLength - 2));
+                    int maxLength = Mathf.Clamp(Mathf.Max(lengthRange.x, lengthRange.y), minLength, Mathf.Max(minLength, axisLength - 2));
+                    int length = UnityEngine.Random.Range(minLength, maxLength + 1);
+                    int startMin = 1;
+                    int startMax = Mathf.Max(startMin, axisLength - length - 1);
+                    int start = UnityEngine.Random.Range(startMin, startMax + 1);
+
+                    int minDepth = Mathf.Clamp(Mathf.Min(depthRange.x, depthRange.y), 1, maxDepth);
+                    int maxCutDepth = Mathf.Clamp(Mathf.Max(depthRange.x, depthRange.y), minDepth, maxDepth);
+                    int depth = UnityEngine.Random.Range(minDepth, maxCutDepth + 1);
+
+                    cuts ??= new List<EdgeCut>();
+                    cuts.Add(new EdgeCut(side, start, length, depth));
+                }
+
+                return cuts != null && cuts.Count > 0 ? cuts.ToArray() : null;
+            }
+        }
+
         private bool TryBuildTemplateRoomLayout(IReadOnlyList<RoomDefinition> roomDefinitions)
         {
             if (roomTemplateSet == null)
@@ -644,6 +1338,7 @@ namespace NeonBreaker.Dungeon
 
                 RectInt worldCellBounds = Offset(localBounds, originCell);
                 generatedRooms.Add(worldCellBounds);
+                roomFloorCells.Add(new List<Vector3Int>());
                 roomTemplateInstances.Add(instance);
                 roomTemplateCenters.Add(instance.CenterWorldPosition);
 
@@ -699,6 +1394,9 @@ namespace NeonBreaker.Dungeon
         private int AddTemplateDoor(RoomTemplateDoor2D door, Vector3 worldCenter)
         {
             doorCellGroups.Add(new List<Vector3Int>());
+            doorDirections.Add(Vector2Int.zero);
+            doorCenters.Add(Vector2Int.zero);
+            doorWidthOffsetRanges.Add(Vector2Int.zero);
             templateDoors.Add(door);
             doorWorldCenters.Add(worldCenter);
             return doorCellGroups.Count - 1;
@@ -730,7 +1428,7 @@ namespace NeonBreaker.Dungeon
         {
             for (int i = 0; i < generatedRooms.Count; i++)
             {
-                StampRoom(generatedRooms[i]);
+                StampRoom(i, generatedRooms[i]);
 
                 if (i > 0)
                 {
@@ -744,14 +1442,390 @@ namespace NeonBreaker.Dungeon
             }
         }
 
-        private void StampRoom(RectInt room)
+        private void RepairProceduralRoomConnectivity()
         {
+            if (!repairRoomConnectivity)
+            {
+                return;
+            }
+
+            for (int roomIndex = 0; roomIndex < generatedRooms.Count; roomIndex++)
+            {
+                EnsureRoomFloorCellList(roomIndex);
+                List<Vector3Int> roomCells = roomFloorCells[roomIndex];
+                if (roomCells.Count == 0)
+                {
+                    Vector3Int fallbackCell = Vector3Int.RoundToInt((Vector3)generatedRooms[roomIndex].center);
+                    AddRoomFloorPatch(roomIndex, fallbackCell, 0);
+                }
+
+                Vector3Int anchor = GetBestRoomCellNear(roomIndex, generatedRooms[roomIndex].center);
+                ConnectRoomDoorToAnchor(roomIndex, GetRoomEntranceDoorIndex(roomIndex), anchor);
+                ConnectRoomDoorToAnchor(roomIndex, GetRoomExitDoorIndex(roomIndex), anchor);
+                ConnectDisconnectedRoomIslands(roomIndex, anchor);
+            }
+        }
+
+        private int GetRoomEntranceDoorIndex(int roomIndex)
+        {
+            return roomIndex >= 0 && roomIndex < roomEntranceDoorIndices.Count
+                ? roomEntranceDoorIndices[roomIndex]
+                : -1;
+        }
+
+        private int GetRoomExitDoorIndex(int roomIndex)
+        {
+            return roomIndex >= 0 && roomIndex < roomExitDoorIndices.Count
+                ? roomExitDoorIndices[roomIndex]
+                : -1;
+        }
+
+        private void ConnectRoomDoorToAnchor(int roomIndex, int doorIndex, Vector3Int anchor)
+        {
+            if (!TryGetDoorCellCenter(doorIndex, out Vector3Int doorCenter))
+            {
+                return;
+            }
+
+            CarveRoomPath(roomIndex, anchor, doorCenter);
+        }
+
+        private bool TryGetDoorCellCenter(int doorIndex, out Vector3Int center)
+        {
+            center = default;
+            if (doorIndex < 0 || doorIndex >= doorCellGroups.Count)
+            {
+                return false;
+            }
+
+            List<Vector3Int> cells = doorCellGroups[doorIndex];
+            if (cells == null || cells.Count == 0)
+            {
+                return false;
+            }
+
+            int x = 0;
+            int y = 0;
+            for (int i = 0; i < cells.Count; i++)
+            {
+                x += cells[i].x;
+                y += cells[i].y;
+            }
+
+            center = new Vector3Int(
+                Mathf.RoundToInt((float)x / cells.Count),
+                Mathf.RoundToInt((float)y / cells.Count),
+                0);
+            return true;
+        }
+
+        private Vector3Int GetBestRoomCellNear(int roomIndex, Vector2 target)
+        {
+            List<Vector3Int> cells = roomFloorCells[roomIndex];
+            bool found = false;
+            float bestDistance = float.MaxValue;
+            Vector3Int bestCell = Vector3Int.RoundToInt(new Vector3(target.x, target.y, 0f));
+
+            for (int i = 0; i < cells.Count; i++)
+            {
+                Vector3Int cell = cells[i];
+                if (!floorCells.Contains(cell))
+                {
+                    continue;
+                }
+
+                Vector2 cellCenter = new Vector2(cell.x + 0.5f, cell.y + 0.5f);
+                float distance = (cellCenter - target).sqrMagnitude;
+                if (!found || distance < bestDistance)
+                {
+                    found = true;
+                    bestDistance = distance;
+                    bestCell = cell;
+                }
+            }
+
+            if (!found)
+            {
+                AddRoomFloorPatch(roomIndex, bestCell, 0);
+            }
+
+            return bestCell;
+        }
+
+        private void ConnectDisconnectedRoomIslands(int roomIndex, Vector3Int anchor)
+        {
+            List<Vector3Int> roomCells = roomFloorCells[roomIndex];
+            if (roomCells.Count <= 1)
+            {
+                return;
+            }
+
+            for (int pass = 0; pass < roomCells.Count; pass++)
+            {
+                HashSet<Vector3Int> roomSet = new HashSet<Vector3Int>(roomCells);
+                if (!roomSet.Contains(anchor))
+                {
+                    AddRoomFloorPatch(roomIndex, anchor, 0);
+                    roomSet.Add(anchor);
+                }
+
+                HashSet<Vector3Int> reachable = FloodFillRoomCells(anchor, roomSet);
+                if (reachable.Count >= roomSet.Count)
+                {
+                    return;
+                }
+
+                Vector3Int unreachable = default;
+                bool foundUnreachable = false;
+                for (int i = 0; i < roomCells.Count; i++)
+                {
+                    Vector3Int cell = roomCells[i];
+                    if (reachable.Contains(cell))
+                    {
+                        continue;
+                    }
+
+                    unreachable = cell;
+                    foundUnreachable = true;
+                    break;
+                }
+
+                if (!foundUnreachable)
+                {
+                    return;
+                }
+
+                Vector3Int nearestReachable = FindNearestCell(unreachable, reachable);
+                CarveRoomPath(roomIndex, nearestReachable, unreachable);
+            }
+        }
+
+        private void FillSmallInteriorVoids()
+        {
+            if (!fillSmallInteriorVoids)
+            {
+                return;
+            }
+
+            int maxFillCells = Mathf.Max(1, maxInteriorVoidFillCells);
+            for (int roomIndex = 0; roomIndex < generatedRooms.Count; roomIndex++)
+            {
+                RectInt room = generatedRooms[roomIndex];
+                HashSet<Vector3Int> visited = new HashSet<Vector3Int>();
+
+                for (int x = room.xMin; x < room.xMax; x++)
+                {
+                    for (int y = room.yMin; y < room.yMax; y++)
+                    {
+                        Vector3Int start = new Vector3Int(x, y, 0);
+                        if (floorCells.Contains(start) || visited.Contains(start))
+                        {
+                            continue;
+                        }
+
+                        List<Vector3Int> voidRegion = CollectRoomVoidRegion(room, start, visited, out bool touchesRoomEdge);
+                        if (touchesRoomEdge || voidRegion.Count == 0 || voidRegion.Count > maxFillCells)
+                        {
+                            continue;
+                        }
+
+                        for (int i = 0; i < voidRegion.Count; i++)
+                        {
+                            AddRoomFloorCell(roomIndex, voidRegion[i]);
+                        }
+                    }
+                }
+            }
+        }
+
+        private List<Vector3Int> CollectRoomVoidRegion(
+            RectInt room,
+            Vector3Int start,
+            HashSet<Vector3Int> visited,
+            out bool touchesRoomEdge)
+        {
+            List<Vector3Int> result = new List<Vector3Int>();
+            Queue<Vector3Int> queue = new Queue<Vector3Int>();
+            touchesRoomEdge = false;
+
+            visited.Add(start);
+            queue.Enqueue(start);
+
+            while (queue.Count > 0)
+            {
+                Vector3Int current = queue.Dequeue();
+                result.Add(current);
+
+                if (current.x <= room.xMin || current.x >= room.xMax - 1 || current.y <= room.yMin || current.y >= room.yMax - 1)
+                {
+                    touchesRoomEdge = true;
+                }
+
+                TryVisitRoomVoidNeighbor(room, current + Vector3Int.right, visited, queue);
+                TryVisitRoomVoidNeighbor(room, current + Vector3Int.left, visited, queue);
+                TryVisitRoomVoidNeighbor(room, current + Vector3Int.up, visited, queue);
+                TryVisitRoomVoidNeighbor(room, current + Vector3Int.down, visited, queue);
+            }
+
+            return result;
+        }
+
+        private void TryVisitRoomVoidNeighbor(RectInt room, Vector3Int cell, HashSet<Vector3Int> visited, Queue<Vector3Int> queue)
+        {
+            if (!room.Contains(new Vector2Int(cell.x, cell.y)) || floorCells.Contains(cell) || !visited.Add(cell))
+            {
+                return;
+            }
+
+            queue.Enqueue(cell);
+        }
+
+        private static HashSet<Vector3Int> FloodFillRoomCells(Vector3Int start, HashSet<Vector3Int> roomSet)
+        {
+            HashSet<Vector3Int> reachable = new HashSet<Vector3Int>();
+            Queue<Vector3Int> queue = new Queue<Vector3Int>();
+            if (!roomSet.Contains(start))
+            {
+                return reachable;
+            }
+
+            reachable.Add(start);
+            queue.Enqueue(start);
+
+            while (queue.Count > 0)
+            {
+                Vector3Int current = queue.Dequeue();
+                TryVisitRoomNeighbor(current + Vector3Int.right, roomSet, reachable, queue);
+                TryVisitRoomNeighbor(current + Vector3Int.left, roomSet, reachable, queue);
+                TryVisitRoomNeighbor(current + Vector3Int.up, roomSet, reachable, queue);
+                TryVisitRoomNeighbor(current + Vector3Int.down, roomSet, reachable, queue);
+            }
+
+            return reachable;
+        }
+
+        private static void TryVisitRoomNeighbor(
+            Vector3Int cell,
+            HashSet<Vector3Int> roomSet,
+            HashSet<Vector3Int> reachable,
+            Queue<Vector3Int> queue)
+        {
+            if (!roomSet.Contains(cell) || !reachable.Add(cell))
+            {
+                return;
+            }
+
+            queue.Enqueue(cell);
+        }
+
+        private static Vector3Int FindNearestCell(Vector3Int target, HashSet<Vector3Int> candidates)
+        {
+            bool found = false;
+            int bestDistance = int.MaxValue;
+            Vector3Int bestCell = target;
+
+            foreach (Vector3Int candidate in candidates)
+            {
+                int distance = Mathf.Abs(candidate.x - target.x) + Mathf.Abs(candidate.y - target.y);
+                if (!found || distance < bestDistance)
+                {
+                    found = true;
+                    bestDistance = distance;
+                    bestCell = candidate;
+                }
+            }
+
+            return bestCell;
+        }
+
+        private void CarveRoomPath(int roomIndex, Vector3Int from, Vector3Int to)
+        {
+            Vector3Int current = from;
+            AddRoomFloorPatch(roomIndex, current, corridorWidth);
+
+            int xStep = current.x <= to.x ? 1 : -1;
+            while (current.x != to.x)
+            {
+                current.x += xStep;
+                AddRoomFloorPatch(roomIndex, current, corridorWidth);
+            }
+
+            int yStep = current.y <= to.y ? 1 : -1;
+            while (current.y != to.y)
+            {
+                current.y += yStep;
+                AddRoomFloorPatch(roomIndex, current, corridorWidth);
+            }
+        }
+
+        private void AddRoomFloorPatch(int roomIndex, Vector3Int center, int width)
+        {
+            EnsureRoomFloorCellList(roomIndex);
+            GetCenteredWidthOffsets(width, out int minOffset, out int maxOffset);
+
+            for (int x = minOffset; x <= maxOffset; x++)
+            {
+                for (int y = minOffset; y <= maxOffset; y++)
+                {
+                    Vector3Int cell = new Vector3Int(center.x + x, center.y + y, 0);
+                    AddRoomFloorCell(roomIndex, cell);
+                }
+            }
+        }
+
+        private void AddRoomFloorCell(int roomIndex, Vector3Int cell)
+        {
+            EnsureRoomFloorCellList(roomIndex);
+            floorCells.Add(cell);
+
+            List<Vector3Int> roomCells = roomFloorCells[roomIndex];
+            if (!roomCells.Contains(cell))
+            {
+                roomCells.Add(cell);
+            }
+        }
+
+        private void StampRoom(int roomIndex, RectInt room)
+        {
+            EnsureRoomFloorCellList(roomIndex);
+            List<Vector3Int> roomCells = roomFloorCells[roomIndex];
+            roomCells.Clear();
+
+            RoomShapeMask shape = RoomShapeMask.Create(
+                room,
+                varyRoomShapes,
+                useStructuredRoomShapes,
+                structuredRoomChance,
+                structureArmMinWidth,
+                structureOuterPadding,
+                allowEdgeCutsOnStructuredRooms,
+                cornerCutChance,
+                cornerCutSize,
+                edgeCutChance,
+                maxEdgeCutsPerRoom,
+                edgeCutDepthRange,
+                edgeCutLengthRange);
             for (int x = room.xMin; x < room.xMax; x++)
             {
                 for (int y = room.yMin; y < room.yMax; y++)
                 {
-                    floorCells.Add(new Vector3Int(x, y, 0));
+                    if (!shape.Contains(x, y))
+                    {
+                        continue;
+                    }
+
+                    Vector3Int cell = new Vector3Int(x, y, 0);
+                    floorCells.Add(cell);
+                    roomCells.Add(cell);
                 }
+            }
+        }
+
+        private void EnsureRoomFloorCellList(int roomIndex)
+        {
+            while (roomFloorCells.Count <= roomIndex)
+            {
+                roomFloorCells.Add(new List<Vector3Int>());
             }
         }
 
@@ -764,15 +1838,15 @@ namespace NeonBreaker.Dungeon
 
         private void StampCorridorLine(Vector2Int from, Vector2Int to)
         {
-            int halfWidth = Mathf.Max(0, corridorWidth / 2);
+            GetCenteredWidthOffsets(corridorWidth, out int minOffset, out int maxOffset);
             int minX = Mathf.Min(from.x, to.x);
             int maxX = Mathf.Max(from.x, to.x);
             int minY = Mathf.Min(from.y, to.y);
             int maxY = Mathf.Max(from.y, to.y);
 
-            for (int x = minX - halfWidth; x <= maxX + halfWidth; x++)
+            for (int x = minX + minOffset; x <= maxX + maxOffset; x++)
             {
-                for (int y = minY - halfWidth; y <= maxY + halfWidth; y++)
+                for (int y = minY + minOffset; y <= maxY + maxOffset; y++)
                 {
                     floorCells.Add(new Vector3Int(x, y, 0));
                 }
@@ -797,12 +1871,12 @@ namespace NeonBreaker.Dungeon
 
         private int AddDoorCells(RectInt room, Vector2Int roomCenter, Vector2Int direction)
         {
-            Vector2Int center = GetDoorCenter(room, roomCenter, direction);
-            int halfWidth = Mathf.Max(0, corridorWidth / 2);
+            Vector2Int center = GetDoorCenter(room, roomCenter, direction) + direction;
+            GetDoorWidthOffsets(center, direction, out int minOffset, out int maxOffset);
             int thickness = Mathf.Max(1, doorThickness);
             List<Vector3Int> cells = new List<Vector3Int>();
 
-            for (int widthOffset = -halfWidth; widthOffset <= halfWidth; widthOffset++)
+            for (int widthOffset = minOffset; widthOffset <= maxOffset; widthOffset++)
             {
                 for (int depth = 0; depth < thickness; depth++)
                 {
@@ -824,9 +1898,36 @@ namespace NeonBreaker.Dungeon
             }
 
             doorCellGroups.Add(cells);
+            doorDirections.Add(direction);
+            doorCenters.Add(center);
+            doorWidthOffsetRanges.Add(new Vector2Int(minOffset, maxOffset));
             templateDoors.Add(null);
             doorWorldCenters.Add(Vector3.positiveInfinity);
             return doorCellGroups.Count - 1;
+        }
+
+        private void GetDoorWidthOffsets(Vector2Int center, Vector2Int direction, out int minOffset, out int maxOffset)
+        {
+            GetCenteredWidthOffsets(corridorWidth, out minOffset, out maxOffset);
+
+            Vector2Int perpendicular = direction.x != 0 ? Vector2Int.up : Vector2Int.right;
+            int maxScanDistance = Mathf.Max(corridorWidth + 4, corridorWidth + doorBlockerSidePaddingCells * 2 + 2);
+            while (minOffset > -maxScanDistance && HasFloor(center + perpendicular * (minOffset - 1)))
+            {
+                minOffset--;
+            }
+
+            while (maxOffset < maxScanDistance && HasFloor(center + perpendicular * (maxOffset + 1)))
+            {
+                maxOffset++;
+            }
+        }
+
+        private static void GetCenteredWidthOffsets(int width, out int minOffset, out int maxOffset)
+        {
+            int safeWidth = Mathf.Max(1, width);
+            minOffset = -((safeWidth - 1) / 2);
+            maxOffset = safeWidth / 2;
         }
 
         private void SetRoomEntranceDoorIndex(int roomIndex, int doorIndex)
@@ -939,16 +2040,444 @@ namespace NeonBreaker.Dungeon
             foreach (Vector3Int cell in floorCells)
             {
                 floorTilemap.SetTile(cell, tileSet.GetRandomFloorTile());
+                if (randomizeFloorTileRotation)
+                {
+                    floorTilemap.SetTransformMatrix(cell, GetRandomCardinalTileTransform());
+                }
+
                 wallTilemap.SetTile(cell, null);
+                if (wallCollisionTilemap != null)
+                {
+                    wallCollisionTilemap.SetTile(cell, null);
+                }
             }
 
             foreach (Vector3Int cell in wallCells)
             {
                 if (!floorCells.Contains(cell))
                 {
-                    wallTilemap.SetTile(cell, tileSet.GetRandomWallTile());
+                    if (useDirectionalOutlineTiles)
+                    {
+                        if (TryGetOutlineDirection(cell, out DungeonTileSet.OutlineDirection direction))
+                        {
+                            TileBase outlineTile = tileSet.GetRandomOutlineTile(direction);
+                            bool showOutlineTile = !ShouldSuppressVisibleOutlineTile(cell, direction);
+
+                            if (showOutlineTile)
+                            {
+                                wallTilemap.SetTile(cell, outlineTile);
+                            }
+
+                            if (ShouldCreateWallCollision(direction))
+                            {
+                                SetWallCollisionTile(cell, outlineTile, direction);
+                                SealCornerCollisionGap(cell, outlineTile, direction);
+                            }
+                        }
+
+                        continue;
+                    }
+
+                    TileBase wallTile = tileSet.GetRandomWallTile();
+                    wallTilemap.SetTile(cell, wallTile);
+                    SetWallCollisionTile(cell, wallTile);
                 }
             }
+        }
+
+        private void SetWallCollisionTile(Vector3Int cell, TileBase tile)
+        {
+            SetWallCollisionTile(cell, tile, null);
+        }
+
+        private void SetWallCollisionTile(Vector3Int cell, TileBase tile, DungeonTileSet.OutlineDirection? direction)
+        {
+            if (!addWallCollider || wallCollisionTilemap == null)
+            {
+                return;
+            }
+
+            TileBase collisionTile = tile != null ? tile : tileSet.GetRandomWallTile();
+            if (collisionTile == null)
+            {
+                collisionTile = tileSet.GetRandomOutlineTile(DungeonTileSet.OutlineDirection.North);
+            }
+
+            Vector3Int collisionCell = direction.HasValue
+                ? GetOffsetWallCollisionCell(cell, direction.Value)
+                : cell;
+
+            if (floorCells.Contains(collisionCell) || IsDoorCell(collisionCell))
+            {
+                return;
+            }
+
+            wallCollisionTilemap.SetTile(collisionCell, collisionTile);
+        }
+
+        private void SealCornerCollisionGap(Vector3Int cell, TileBase tile, DungeonTileSet.OutlineDirection direction)
+        {
+            if (!sealCornerCollisionGaps || !IsAnyCornerDirection(direction))
+            {
+                return;
+            }
+
+            TileBase collisionTile = tile != null ? tile : tileSet.GetRandomWallTile();
+            if (collisionTile == null)
+            {
+                collisionTile = tileSet.GetRandomOutlineTile(DungeonTileSet.OutlineDirection.North);
+            }
+
+            Vector2Int outward = GetOutlineOutwardDirection(direction);
+            if (outward.x == 0 || outward.y == 0)
+            {
+                return;
+            }
+
+            int offset = Mathf.Max(0, wallCollisionOutwardOffset);
+            TrySetWallCollisionCell(cell, collisionTile);
+            for (int step = 1; step <= offset; step++)
+            {
+                TrySetWallCollisionCell(new Vector3Int(cell.x + outward.x * step, cell.y, cell.z), collisionTile);
+                TrySetWallCollisionCell(new Vector3Int(cell.x, cell.y + outward.y * step, cell.z), collisionTile);
+                TrySetWallCollisionCell(new Vector3Int(cell.x + outward.x * step, cell.y + outward.y * step, cell.z), collisionTile);
+            }
+        }
+
+        private void TrySetWallCollisionCell(Vector3Int cell, TileBase tile)
+        {
+            if (wallCollisionTilemap == null || floorCells.Contains(cell) || IsDoorCell(cell))
+            {
+                return;
+            }
+
+            wallCollisionTilemap.SetTile(cell, tile);
+        }
+
+        private Vector3Int GetOffsetWallCollisionCell(Vector3Int cell, DungeonTileSet.OutlineDirection direction)
+        {
+            int offset = Mathf.Max(0, wallCollisionOutwardOffset);
+            if (offset == 0)
+            {
+                return cell;
+            }
+
+            Vector2Int outward = GetOutlineOutwardDirection(direction);
+            return new Vector3Int(
+                cell.x + outward.x * offset,
+                cell.y + outward.y * offset,
+                cell.z);
+        }
+
+        private static Vector2Int GetOutlineOutwardDirection(DungeonTileSet.OutlineDirection direction)
+        {
+            switch (direction)
+            {
+                case DungeonTileSet.OutlineDirection.North:
+                    return Vector2Int.up;
+                case DungeonTileSet.OutlineDirection.South:
+                    return Vector2Int.down;
+                case DungeonTileSet.OutlineDirection.East:
+                    return Vector2Int.right;
+                case DungeonTileSet.OutlineDirection.West:
+                    return Vector2Int.left;
+                case DungeonTileSet.OutlineDirection.NorthEast:
+                case DungeonTileSet.OutlineDirection.OuterNorthEast:
+                    return Vector2Int.up + Vector2Int.right;
+                case DungeonTileSet.OutlineDirection.NorthWest:
+                case DungeonTileSet.OutlineDirection.OuterNorthWest:
+                    return Vector2Int.up + Vector2Int.left;
+                case DungeonTileSet.OutlineDirection.SouthEast:
+                case DungeonTileSet.OutlineDirection.OuterSouthEast:
+                    return Vector2Int.down + Vector2Int.right;
+                case DungeonTileSet.OutlineDirection.SouthWest:
+                case DungeonTileSet.OutlineDirection.OuterSouthWest:
+                    return Vector2Int.down + Vector2Int.left;
+                default:
+                    return Vector2Int.zero;
+            }
+        }
+
+        private bool ShouldSuppressVisibleOutlineTile(Vector3Int cell, DungeonTileSet.OutlineDirection direction)
+        {
+            return suppressDoorwayOuterCornerTiles
+                && IsLogicalOuterCornerDirection(direction)
+                && IsNearDoorCell(cell);
+        }
+
+        private bool ShouldCreateWallCollision(DungeonTileSet.OutlineDirection direction)
+        {
+            return sealCornerCollisionGaps && IsAnyCornerDirection(direction)
+                || collideOuterCornerTiles
+                || !IsLogicalOuterCornerDirection(direction);
+        }
+
+        private static bool IsAnyCornerDirection(DungeonTileSet.OutlineDirection direction)
+        {
+            return IsInnerCornerDirection(direction) || IsOuterCornerDirection(direction);
+        }
+
+        private bool IsLogicalOuterCornerDirection(DungeonTileSet.OutlineDirection direction)
+        {
+            return swapInnerOuterCornerTiles
+                ? IsInnerCornerDirection(direction)
+                : IsOuterCornerDirection(direction);
+        }
+
+        private static bool IsOuterCornerDirection(DungeonTileSet.OutlineDirection direction)
+        {
+            return direction == DungeonTileSet.OutlineDirection.OuterNorthEast
+                || direction == DungeonTileSet.OutlineDirection.OuterNorthWest
+                || direction == DungeonTileSet.OutlineDirection.OuterSouthEast
+                || direction == DungeonTileSet.OutlineDirection.OuterSouthWest;
+        }
+
+        private static bool IsInnerCornerDirection(DungeonTileSet.OutlineDirection direction)
+        {
+            return direction == DungeonTileSet.OutlineDirection.NorthEast
+                || direction == DungeonTileSet.OutlineDirection.NorthWest
+                || direction == DungeonTileSet.OutlineDirection.SouthEast
+                || direction == DungeonTileSet.OutlineDirection.SouthWest;
+        }
+
+        private bool IsNearDoorCell(Vector3Int cell)
+        {
+            for (int groupIndex = 0; groupIndex < doorCellGroups.Count; groupIndex++)
+            {
+                List<Vector3Int> doorCells = doorCellGroups[groupIndex];
+                if (doorCells == null)
+                {
+                    continue;
+                }
+
+                for (int cellIndex = 0; cellIndex < doorCells.Count; cellIndex++)
+                {
+                    Vector3Int doorCell = doorCells[cellIndex];
+                    if (Mathf.Abs(cell.x - doorCell.x) <= 1 && Mathf.Abs(cell.y - doorCell.y) <= 1)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private bool IsDoorCell(Vector3Int cell)
+        {
+            for (int groupIndex = 0; groupIndex < doorCellGroups.Count; groupIndex++)
+            {
+                List<Vector3Int> doorCells = doorCellGroups[groupIndex];
+                if (doorCells == null)
+                {
+                    continue;
+                }
+
+                for (int cellIndex = 0; cellIndex < doorCells.Count; cellIndex++)
+                {
+                    if (doorCells[cellIndex] == cell)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private bool TryGetOutlineDirection(Vector3Int cell, out DungeonTileSet.OutlineDirection direction)
+        {
+            bool floorNorth = HasFloor(cell.x, cell.y + 1);
+            bool floorSouth = HasFloor(cell.x, cell.y - 1);
+            bool floorEast = HasFloor(cell.x + 1, cell.y);
+            bool floorWest = HasFloor(cell.x - 1, cell.y);
+
+            // Inner corners touch the playable floor on two cardinal sides.
+            if (floorSouth && floorWest)
+            {
+                direction = GetCornerOutlineDirection(DungeonTileSet.OutlineDirection.NorthEast);
+                return true;
+            }
+
+            if (floorSouth && floorEast)
+            {
+                direction = GetCornerOutlineDirection(DungeonTileSet.OutlineDirection.NorthWest);
+                return true;
+            }
+
+            if (floorNorth && floorWest)
+            {
+                direction = GetCornerOutlineDirection(DungeonTileSet.OutlineDirection.SouthEast);
+                return true;
+            }
+
+            if (floorNorth && floorEast)
+            {
+                direction = GetCornerOutlineDirection(DungeonTileSet.OutlineDirection.SouthWest);
+                return true;
+            }
+
+            if (floorSouth)
+            {
+                direction = DungeonTileSet.OutlineDirection.North;
+                return true;
+            }
+
+            if (floorNorth)
+            {
+                direction = DungeonTileSet.OutlineDirection.South;
+                return true;
+            }
+
+            if (floorWest)
+            {
+                direction = DungeonTileSet.OutlineDirection.East;
+                return true;
+            }
+
+            if (floorEast)
+            {
+                direction = DungeonTileSet.OutlineDirection.West;
+                return true;
+            }
+
+            bool floorSouthWest = HasFloor(cell.x - 1, cell.y - 1);
+            bool floorSouthEast = HasFloor(cell.x + 1, cell.y - 1);
+            bool floorNorthWest = HasFloor(cell.x - 1, cell.y + 1);
+            bool floorNorthEast = HasFloor(cell.x + 1, cell.y + 1);
+
+            // Outer corners only see the playable floor diagonally, so they are visual caps.
+            if (floorSouthWest)
+            {
+                direction = GetCornerOutlineDirection(DungeonTileSet.OutlineDirection.OuterNorthEast);
+                return true;
+            }
+
+            if (floorSouthEast)
+            {
+                direction = GetCornerOutlineDirection(DungeonTileSet.OutlineDirection.OuterNorthWest);
+                return true;
+            }
+
+            if (floorNorthWest)
+            {
+                direction = GetCornerOutlineDirection(DungeonTileSet.OutlineDirection.OuterSouthEast);
+                return true;
+            }
+
+            if (floorNorthEast)
+            {
+                direction = GetCornerOutlineDirection(DungeonTileSet.OutlineDirection.OuterSouthWest);
+                return true;
+            }
+
+            direction = DungeonTileSet.OutlineDirection.North;
+            return false;
+        }
+
+        private DungeonTileSet.OutlineDirection GetCornerOutlineDirection(DungeonTileSet.OutlineDirection direction)
+        {
+            if (!swapInnerOuterCornerTiles)
+            {
+                return direction;
+            }
+
+            switch (direction)
+            {
+                case DungeonTileSet.OutlineDirection.NorthEast:
+                    return DungeonTileSet.OutlineDirection.OuterNorthEast;
+                case DungeonTileSet.OutlineDirection.NorthWest:
+                    return DungeonTileSet.OutlineDirection.OuterNorthWest;
+                case DungeonTileSet.OutlineDirection.SouthEast:
+                    return DungeonTileSet.OutlineDirection.OuterSouthEast;
+                case DungeonTileSet.OutlineDirection.SouthWest:
+                    return DungeonTileSet.OutlineDirection.OuterSouthWest;
+                case DungeonTileSet.OutlineDirection.OuterNorthEast:
+                    return DungeonTileSet.OutlineDirection.NorthEast;
+                case DungeonTileSet.OutlineDirection.OuterNorthWest:
+                    return DungeonTileSet.OutlineDirection.NorthWest;
+                case DungeonTileSet.OutlineDirection.OuterSouthEast:
+                    return DungeonTileSet.OutlineDirection.SouthEast;
+                case DungeonTileSet.OutlineDirection.OuterSouthWest:
+                    return DungeonTileSet.OutlineDirection.SouthWest;
+                default:
+                    return direction;
+            }
+        }
+
+        private bool HasFloor(int x, int y)
+        {
+            return floorCells.Contains(new Vector3Int(x, y, 0));
+        }
+
+        private bool HasFloor(Vector2Int cell)
+        {
+            return HasFloor(cell.x, cell.y);
+        }
+
+        private void ApplyRoomDecorations()
+        {
+            if (!decorateRooms || decorationTilemap == null || tileSet == null || roomDecorationChance <= 0f)
+            {
+                return;
+            }
+
+            int padding = Mathf.Max(0, decorationRoomPadding);
+            int centerSafeRadius = Mathf.Max(0, decorationCenterSafeRadius);
+            int centerSafeRadiusSqr = centerSafeRadius * centerSafeRadius;
+
+            for (int roomIndex = 0; roomIndex < generatedRooms.Count; roomIndex++)
+            {
+                RectInt room = generatedRooms[roomIndex];
+                Vector2 center = room.center;
+
+                for (int x = room.xMin + padding; x < room.xMax - padding; x++)
+                {
+                    for (int y = room.yMin + padding; y < room.yMax - padding; y++)
+                    {
+                        Vector3Int cell = new Vector3Int(x, y, 0);
+                        if (!floorCells.Contains(cell) || wallCells.Contains(cell))
+                        {
+                            continue;
+                        }
+
+                        if (centerSafeRadius > 0)
+                        {
+                            Vector2 delta = new Vector2(x + 0.5f, y + 0.5f) - center;
+                            if (delta.sqrMagnitude < centerSafeRadiusSqr)
+                            {
+                                continue;
+                            }
+                        }
+
+                        if (UnityEngine.Random.value > roomDecorationChance)
+                        {
+                            continue;
+                        }
+
+                        TileBase decorationTile = tileSet.GetRandomDecorationTile();
+                        if (decorationTile != null)
+                        {
+                            decorationTilemap.SetTile(cell, decorationTile);
+                            if (randomizeDecorationTileRotation)
+                            {
+                                decorationTilemap.SetTransformMatrix(cell, GetRandomCardinalTileTransform());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private static Matrix4x4 GetRandomCardinalTileTransform()
+        {
+            int quarterTurns = UnityEngine.Random.Range(0, 4);
+            if (quarterTurns == 0)
+            {
+                return Matrix4x4.identity;
+            }
+
+            return Matrix4x4.Rotate(Quaternion.Euler(0f, 0f, quarterTurns * 90f));
         }
 
         private void ApplyDoors()
@@ -971,13 +2500,18 @@ namespace NeonBreaker.Dungeon
                     continue;
                 }
 
-                Tilemap doorTilemap = CreateTilemap(parent, $"Door Tilemap {i}", 2);
+                Tilemap doorTilemap = CreateTilemap(parent, $"Door Tilemap {i}", 3);
+                doorTilemap.gameObject.layer = GetDoorCollisionLayer();
                 TilemapCollider2D doorCollider = doorTilemap.gameObject.AddComponent<TilemapCollider2D>();
+                doorCollider.enabled = useDoorTilemapCollider;
                 BoxCollider2D doorBlocker = CreateDoorBlocker(parent, i, cells);
+                Matrix4x4 doorTransform = GetDoorTileTransform(i);
 
                 for (int cellIndex = 0; cellIndex < cells.Count; cellIndex++)
                 {
-                    doorTilemap.SetTile(cells[cellIndex], tileSet.GetRandomDoorTile());
+                    Vector3Int cell = cells[cellIndex];
+                    doorTilemap.SetTile(cell, tileSet.GetRandomDoorTile());
+                    doorTilemap.SetTransformMatrix(cell, doorTransform);
                 }
 
                 doorTilemaps.Add(doorTilemap);
@@ -986,11 +2520,127 @@ namespace NeonBreaker.Dungeon
             }
         }
 
+        private Matrix4x4 GetDoorTileTransform(int doorIndex)
+        {
+            if (!rotateDoorTilesByDirection || doorIndex < 0 || doorIndex >= doorDirections.Count)
+            {
+                return Matrix4x4.identity;
+            }
+
+            Vector2Int direction = doorDirections[doorIndex];
+            if (direction == Vector2Int.zero)
+            {
+                return Matrix4x4.identity;
+            }
+
+            Vector2 defaultDirection = GetDoorDefaultDirection();
+            Vector2 targetDirection = new Vector2(direction.x, direction.y);
+            float angle = Vector2.SignedAngle(defaultDirection, targetDirection);
+            return Matrix4x4.Rotate(Quaternion.Euler(0f, 0f, angle));
+        }
+
+        private int GetDoorCollisionLayer()
+        {
+            if (wallCollisionTilemap != null)
+            {
+                return wallCollisionTilemap.gameObject.layer;
+            }
+
+            if (wallTilemap != null)
+            {
+                return wallTilemap.gameObject.layer;
+            }
+
+            return gameObject.layer;
+        }
+
+        private Vector2 GetDoorDefaultDirection()
+        {
+            switch (doorSpriteDefaultFacing)
+            {
+                case DoorSpriteFacing.Down:
+                    return Vector2.down;
+                case DoorSpriteFacing.Left:
+                    return Vector2.left;
+                case DoorSpriteFacing.Right:
+                    return Vector2.right;
+                case DoorSpriteFacing.Up:
+                default:
+                    return Vector2.up;
+            }
+        }
+
         private BoxCollider2D CreateDoorBlocker(Transform parent, int doorIndex, List<Vector3Int> cells)
         {
             if (floorTilemap == null || cells == null || cells.Count == 0)
             {
                 return null;
+            }
+
+            Vector2Int direction = doorIndex >= 0 && doorIndex < doorDirections.Count
+                ? doorDirections[doorIndex]
+                : Vector2Int.zero;
+            Vector3 cellSize = floorTilemap.layoutGrid != null
+                ? floorTilemap.layoutGrid.cellSize
+                : Vector3.one;
+            Bounds blockerBounds = BuildDoorBlockerBounds(doorIndex, cells, direction, cellSize);
+
+            if (direction.x != 0)
+            {
+                float minHeight = Mathf.Abs(cellSize.y) * Mathf.Max(1, corridorWidth + doorBlockerSidePaddingCells * 2);
+                if (blockerBounds.size.y < minHeight)
+                {
+                    blockerBounds.Expand(new Vector3(0f, minHeight - blockerBounds.size.y, 0f));
+                }
+            }
+            else if (direction.y != 0)
+            {
+                float minWidth = Mathf.Abs(cellSize.x) * Mathf.Max(1, corridorWidth + doorBlockerSidePaddingCells * 2);
+                if (blockerBounds.size.x < minWidth)
+                {
+                    blockerBounds.Expand(new Vector3(minWidth - blockerBounds.size.x, 0f, 0f));
+                }
+            }
+
+            GameObject blockerObject = new GameObject($"Door Blocker {doorIndex}");
+            blockerObject.layer = GetDoorCollisionLayer();
+            blockerObject.transform.SetParent(parent, true);
+            blockerObject.transform.position = blockerBounds.center;
+
+            BoxCollider2D blocker = blockerObject.AddComponent<BoxCollider2D>();
+            blocker.isTrigger = false;
+            blocker.size = new Vector2(blockerBounds.size.x, blockerBounds.size.y);
+
+            return blocker;
+        }
+
+        private Bounds BuildDoorBlockerBounds(int doorIndex, List<Vector3Int> cells, Vector2Int direction, Vector3 cellSize)
+        {
+            if (direction != Vector2Int.zero
+                && doorIndex >= 0
+                && doorIndex < doorCenters.Count
+                && doorIndex < doorWidthOffsetRanges.Count)
+            {
+                Vector2Int center = doorCenters[doorIndex];
+                Vector2Int widthRange = doorWidthOffsetRanges[doorIndex];
+                int thickness = Mathf.Max(1, doorThickness);
+                float sidePadding = Mathf.Max(0, doorBlockerSidePaddingCells);
+                float depthPadding = Mathf.Max(0f, doorBlockerDepthPaddingCells);
+
+                if (direction.x != 0)
+                {
+                    float xMinCell = direction.x > 0 ? center.x - depthPadding : center.x - thickness - depthPadding + 1f;
+                    float xMaxCell = direction.x > 0 ? center.x + thickness + depthPadding : center.x + depthPadding + 1f;
+                    float yMinCell = center.y + widthRange.x - sidePadding;
+                    float yMaxCell = center.y + widthRange.y + sidePadding + 1f;
+                    return CreateCellBounds(xMinCell, yMinCell, xMaxCell, yMaxCell);
+                }
+
+                float xMin = center.x + widthRange.x - sidePadding;
+                float xMax = center.x + widthRange.y + sidePadding + 1f;
+                float yMin = direction.y > 0 ? center.y - depthPadding : center.y - thickness - depthPadding + 1f;
+                float yMax = direction.y > 0 ? center.y + thickness + depthPadding : center.y + depthPadding + 1f;
+                return CreateCellBounds(xMin, yMin, xMax, yMax);
             }
 
             Vector3Int min = cells[0];
@@ -1004,18 +2654,19 @@ namespace NeonBreaker.Dungeon
 
             Vector3 worldMin = floorTilemap.CellToWorld(min);
             Vector3 worldMax = floorTilemap.CellToWorld(new Vector3Int(max.x + 1, max.y + 1, 0));
+            Bounds fallbackBounds = new Bounds((worldMin + worldMax) * 0.5f, worldMax - worldMin);
+            fallbackBounds.Expand(new Vector3(
+                Mathf.Abs(cellSize.x) * doorBlockerSidePaddingCells,
+                Mathf.Abs(cellSize.y) * doorBlockerSidePaddingCells,
+                0f));
+            return fallbackBounds;
+        }
 
-            GameObject blockerObject = new GameObject($"Door Blocker {doorIndex}");
-            blockerObject.transform.SetParent(parent, true);
-            blockerObject.transform.position = (worldMin + worldMax) * 0.5f;
-
-            BoxCollider2D blocker = blockerObject.AddComponent<BoxCollider2D>();
-            blocker.isTrigger = false;
-            blocker.size = new Vector2(
-                Mathf.Abs(worldMax.x - worldMin.x),
-                Mathf.Abs(worldMax.y - worldMin.y));
-
-            return blocker;
+        private Bounds CreateCellBounds(float xMinCell, float yMinCell, float xMaxCell, float yMaxCell)
+        {
+            Vector3 worldMin = floorTilemap.CellToWorld(new Vector3Int(Mathf.FloorToInt(xMinCell), Mathf.FloorToInt(yMinCell), 0));
+            Vector3 worldMax = floorTilemap.CellToWorld(new Vector3Int(Mathf.CeilToInt(xMaxCell), Mathf.CeilToInt(yMaxCell), 0));
+            return new Bounds((worldMin + worldMax) * 0.5f, worldMax - worldMin);
         }
 
         private void ApplyRoomTriggers()
@@ -1202,7 +2853,7 @@ namespace NeonBreaker.Dungeon
             TilemapCollider2D doorCollider = doorIndex < doorColliders.Count ? doorColliders[doorIndex] : null;
             if (doorCollider != null)
             {
-                doorCollider.enabled = locked;
+                doorCollider.enabled = locked && useDoorTilemapCollider;
             }
 
             if (doorIndex < doorBlockers.Count && doorBlockers[doorIndex] != null)

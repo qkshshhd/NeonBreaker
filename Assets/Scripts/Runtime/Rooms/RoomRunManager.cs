@@ -369,10 +369,15 @@ namespace NeonBreaker.Rooms
             if (dungeonGenerator.TryGetRoomBounds(roomIndex, out RectInt roomBounds))
             {
                 bool hasTemplateSpawnPositions = dungeonGenerator.TryGetRoomSpawnPositions(roomIndex, roomSpawnPositions);
+                if (!hasTemplateSpawnPositions)
+                {
+                    hasTemplateSpawnPositions = dungeonGenerator.TryGetRoomSafeSpawnPositions(roomIndex, roomSpawnPositions);
+                }
+
                 enemySpawner.SetActiveRoomSpawnData(
                     roomBounds,
                     dungeonGenerator.FloorTilemap,
-                    dungeonGenerator.GetRoomCenterWorld(roomIndex),
+                    dungeonGenerator.GetRoomRewardWorldPosition(roomIndex),
                     hasTemplateSpawnPositions ? roomSpawnPositions : null);
             }
         }
@@ -535,7 +540,15 @@ namespace NeonBreaker.Rooms
                 return;
             }
 
-            player.position = dungeonGenerator.GetRoomCenterWorld(roomIndex);
+            player.position = dungeonGenerator.TryGetSafeRoomWorldPosition(roomIndex, out Vector3 safePosition)
+                ? safePosition
+                : dungeonGenerator.GetRoomCenterWorld(roomIndex);
+
+            if (player.TryGetComponent(out Rigidbody2D body))
+            {
+                body.linearVelocity = Vector2.zero;
+                body.angularVelocity = 0f;
+            }
         }
 
         private Health ResolvePlayerHealth()

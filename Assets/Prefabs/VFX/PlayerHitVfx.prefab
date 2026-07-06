@@ -225,7 +225,7 @@ ParticleSystem:
       serializedVersion: 2
       minMaxState: 0
       minColor: {r: 1, g: 1, b: 1, a: 1}
-      maxColor: {r: 1, g: 1, b: 1, a: 1}
+      maxColor: {r: 0.066037595, g: 0.32595682, b: 1, a: 1}
       maxGradient:
         serializedVersion: 2
         key0: {r: 1, g: 1, b: 1, a: 1}
@@ -4926,15 +4926,17 @@ MonoBehaviour:
   returnBeforeAnimatorLoops: 1
   animationReturnLeadTime: 0.02
   animationReturnPadding: 0.02
+  animatorHideNormalizedTime: 0.98
+  maxAnimatorLifetime: 10
   hideRenderersBeforeReturn: 1
   rendererHideLeadTime: 0.06
   restartAnimatorOnSpawn: 1
   restartParticlesOnSpawn: 1
   autoPlayWhenUnpooled: 1
-  destroyWhenUnpooled: 1
   lockWorldTransformDuringLifetime: 1
   multiplyLockedScaleByPrefabScale: 1
   animator: {fileID: 0}
   visualRoot: {fileID: 0}
   visualRootBaseScale: {x: 1, y: 1, z: 1}
+  overrideVisualRootBaseScale: 0
   useSpriteRendererFlipForVisualFlip: 1

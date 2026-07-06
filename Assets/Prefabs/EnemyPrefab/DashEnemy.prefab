@@ -219,6 +219,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NeonBreaker.Combat.KnockbackReceiver2D
   resistance: 0
+  motionStyle: 1
+  mechanicalImpactTimeRatio: 0.35
+  mechanicalBrakeStrength: 0.85
 --- !u!114 &1371146733937598201
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -335,7 +338,7 @@ MonoBehaviour:
   deathClip: {fileID: 0}
   sfxVolume: 1
   pitchVariance: 0.05
-  hitVfxPoolKey: {fileID: 0}
+  hitVfxPoolKey: {fileID: 11400000, guid: b584440959b880b48b4129ba6b5e0291, type: 2}
   hitVfx: {fileID: 3756106986630792206, guid: 02b245c4c319b224f9d96d84e1d6fb55, type: 3}
   playHitVfxOnDamage: 0
   basicAttackSlashVfxPoolKey: {fileID: 11400000, guid: 3494823af3cc8da40a39ad7c607f4ac5, type: 2}
@@ -358,6 +361,13 @@ MonoBehaviour:
   restartParticlesAfterShapeRotation: 1
   drawImpactVfxDebug: 0
   debugLineDuration: 0.25
+  playMechanicalHitReaction: 1
+  visualRoot: {fileID: 0}
+  hitSnapDistance: 0.07
+  hitSnapDuration: 0.035
+  hitReturnDuration: 0.08
+  hitAngularJolt: 5
+  hitScaleJolt: {x: 1.08, y: 0.92, z: 1}
 --- !u!114 &8525469785780454888
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -551,7 +561,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: a97c105638bdf8b4a8650670310a4cd3, type: 2}
+  - {fileID: 2100000, guid: 1033ea608da9e924f9646bf6f0884b27, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

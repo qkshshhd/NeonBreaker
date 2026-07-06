@@ -84,7 +84,7 @@ namespace NeonBreaker.Upgrades
         {
             if (dungeonGenerator != null)
             {
-                return dungeonGenerator.GetRoomCenterWorld(roomIndex);
+                return dungeonGenerator.GetRoomRewardWorldPosition(roomIndex);
             }
 
             return transform.position;

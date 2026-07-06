@@ -225,7 +225,7 @@ ParticleSystem:
       serializedVersion: 2
       minMaxState: 0
       minColor: {r: 1, g: 1, b: 1, a: 1}
-      maxColor: {r: 1, g: 1, b: 1, a: 1}
+      maxColor: {r: 1, g: 0.8179906, b: 0, a: 1}
       maxGradient:
         serializedVersion: 2
         key0: {r: 1, g: 1, b: 1, a: 1}
@@ -289,8 +289,8 @@ ParticleSystem:
     startSize:
       serializedVersion: 2
       minMaxState: 3
-      scalar: 0.15
-      minScalar: 0.05
+      scalar: 0.2
+      minScalar: 0.1
       maxCurve:
         serializedVersion: 2
         m_Curve:
@@ -447,7 +447,7 @@ ParticleSystem:
         m_RotationOrder: 4
     startRotationX:
       serializedVersion: 2
-      minMaxState: 0
+      minMaxState: 3
       scalar: 0
       minScalar: 0
       maxCurve:
@@ -500,7 +500,7 @@ ParticleSystem:
         m_RotationOrder: 4
     startRotationY:
       serializedVersion: 2
-      minMaxState: 0
+      minMaxState: 3
       scalar: 0
       minScalar: 0
       maxCurve:
@@ -553,9 +553,9 @@ ParticleSystem:
         m_RotationOrder: 4
     startRotation:
       serializedVersion: 2
-      minMaxState: 0
+      minMaxState: 3
       scalar: 0
-      minScalar: 0
+      minScalar: 3.1415925
       maxCurve:
         serializedVersion: 2
         m_Curve:
@@ -609,7 +609,7 @@ ParticleSystem:
     maxNumParticles: 1000
     customEmitterVelocity: {x: 0, y: 0, z: 0}
     size3D: 0
-    rotation3D: 0
+    rotation3D: 1
     gravityModifier:
       serializedVersion: 2
       minMaxState: 0
@@ -4926,15 +4926,17 @@ MonoBehaviour:
   returnBeforeAnimatorLoops: 1
   animationReturnLeadTime: 0.02
   animationReturnPadding: 0.02
+  animatorHideNormalizedTime: 0.98
+  maxAnimatorLifetime: 10
   hideRenderersBeforeReturn: 1
   rendererHideLeadTime: 0.06
   restartAnimatorOnSpawn: 1
   restartParticlesOnSpawn: 1
   autoPlayWhenUnpooled: 1
-  destroyWhenUnpooled: 1
   lockWorldTransformDuringLifetime: 1
   multiplyLockedScaleByPrefabScale: 1
   animator: {fileID: 0}
   visualRoot: {fileID: 0}
   visualRootBaseScale: {x: 1, y: 1, z: 1}
+  overrideVisualRootBaseScale: 0
   useSpriteRendererFlipForVisualFlip: 1

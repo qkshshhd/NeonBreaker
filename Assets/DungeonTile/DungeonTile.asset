@@ -13,11 +13,54 @@ MonoBehaviour:
   m_Name: DungeonTile
   m_EditorClassIdentifier: Assembly-CSharp::NeonBreaker.Dungeon.DungeonTileSet
   floorSprites:
-  - sprite: {fileID: 209751846086810860, guid: 87b40c9a71f914849a2a1d675ee2047a, type: 3}
+  - sprite: {fileID: 4300183294290472985, guid: afd2ac68f8b49ef408548ef717fec45f, type: 3}
+    weight: 70
+  - sprite: {fileID: 1700424805454172393, guid: b14857c3281231649bb6b1a8d2764b52, type: 3}
+    weight: 20
+  - sprite: {fileID: -8701646099545424770, guid: e717d201b59b21b428855872180cec3f, type: 3}
+    weight: 3
+  - sprite: {fileID: -4196686386569784378, guid: 04e6c759470e1ff4289d46f0b183d4f7, type: 3}
     weight: 1
   wallSprites:
   - sprite: {fileID: -623661526608458578, guid: c32e49b8c2ebf0e4da193977103466e8, type: 3}
     weight: 1
   doorSprites:
-  - sprite: {fileID: 563586620515238700, guid: cc3a9caad3cf7934ea19c7f88f3dd671, type: 3}
+  - sprite: {fileID: 4308341230832281946, guid: 3abc446a79fad57439c0315992da3a56, type: 3}
+    weight: 1
+  decorationSprites: []
+  outlineNorthSprites:
+  - sprite: {fileID: -4320923034863861904, guid: e4424fee1849fb14a853125ab648e25f, type: 3}
+    weight: 1
+  outlineSouthSprites:
+  - sprite: {fileID: 7192364422933678838, guid: 215c2979661448649a02b0a6e683b7a3, type: 3}
+    weight: 1
+  outlineEastSprites:
+  - sprite: {fileID: 7106021886829507142, guid: 829f217e85984e54fb042888964513c5, type: 3}
+    weight: 1
+  outlineWestSprites:
+  - sprite: {fileID: -2104934154217642700, guid: 4f9c02763d8c0514e8462acc8a0418da, type: 3}
+    weight: 1
+  outlineNorthEastSprites:
+  - sprite: {fileID: -6552404977213380078, guid: 7672f464bd360a746819bcce69e6af7c, type: 3}
+    weight: 1
+  outlineNorthWestSprites:
+  - sprite: {fileID: -8321989056691886926, guid: 84b10842b3720074c87a9dd1cef968b3, type: 3}
+    weight: 1
+  outlineSouthEastSprites:
+  - sprite: {fileID: -6534433232327588889, guid: a753e39294e467847bc4ed031d1da58d, type: 3}
+    weight: 1
+  outlineSouthWestSprites:
+  - sprite: {fileID: 803567457875048067, guid: 6c57d32d1214d0c43bde4b575bce71e4, type: 3}
+    weight: 1
+  outlineOuterNorthEastSprites:
+  - sprite: {fileID: 4300183294290472985, guid: afd2ac68f8b49ef408548ef717fec45f, type: 3}
+    weight: 1
+  outlineOuterNorthWestSprites:
+  - sprite: {fileID: 4300183294290472985, guid: afd2ac68f8b49ef408548ef717fec45f, type: 3}
+    weight: 1
+  outlineOuterSouthEastSprites:
+  - sprite: {fileID: 4300183294290472985, guid: afd2ac68f8b49ef408548ef717fec45f, type: 3}
+    weight: 1
+  outlineOuterSouthWestSprites:
+  - sprite: {fileID: 4300183294290472985, guid: afd2ac68f8b49ef408548ef717fec45f, type: 3}
     weight: 1

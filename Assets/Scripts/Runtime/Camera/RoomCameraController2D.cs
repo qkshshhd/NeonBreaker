@@ -27,6 +27,8 @@ namespace NeonBreaker.CameraSystem
         [Header("Room Bounds")]
         [SerializeField] private bool confineToCurrentRoom = true;
         [SerializeField, Min(0f)] private float roomPadding = 0.5f;
+        [SerializeField] private bool useActualRoomFloorBounds = true;
+        [SerializeField] private bool followTargetWhenRoomFitsView = true;
         [SerializeField] private bool includeCorridorWhileRoomCleared = true;
         [SerializeField] private bool freeFollowWhileMovingBetweenRooms = true;
         [SerializeField] private bool freeFollowInRestRooms = true;
@@ -379,7 +381,7 @@ namespace NeonBreaker.CameraSystem
         {
             worldBounds = default;
 
-            if (dungeonGenerator == null || activeRoomIndex < 0 || !dungeonGenerator.TryGetRoomBounds(activeRoomIndex, out RectInt roomBounds))
+            if (dungeonGenerator == null || activeRoomIndex < 0 || !TryGetCameraRoomBounds(activeRoomIndex, out RectInt roomBounds))
             {
                 return false;
             }
@@ -387,7 +389,7 @@ namespace NeonBreaker.CameraSystem
             RectInt bounds = roomBounds;
             if (includeCorridorWhileRoomCleared && runManager != null && runManager.IsWaitingForExit && runManager.HasNextRoom)
             {
-                if (dungeonGenerator.TryGetRoomBounds(activeRoomIndex + 1, out RectInt nextRoomBounds))
+                if (TryGetCameraRoomBounds(activeRoomIndex + 1, out RectInt nextRoomBounds))
                 {
                     bounds = Union(bounds, nextRoomBounds);
                 }
@@ -405,6 +407,19 @@ namespace NeonBreaker.CameraSystem
             Vector3 size = new Vector3(Mathf.Abs(max.x - min.x), Mathf.Abs(max.y - min.y), 0f);
             worldBounds = new Bounds(center, size);
             return true;
+        }
+
+        private bool TryGetCameraRoomBounds(int roomIndex, out RectInt roomBounds)
+        {
+            if (dungeonGenerator == null)
+            {
+                roomBounds = default;
+                return false;
+            }
+
+            return useActualRoomFloorBounds
+                ? dungeonGenerator.TryGetRoomFloorBounds(roomIndex, out roomBounds)
+                : dungeonGenerator.TryGetRoomBounds(roomIndex, out roomBounds);
         }
 
         private void ResolveSources()
@@ -453,11 +468,11 @@ namespace NeonBreaker.CameraSystem
             return new RectInt(xMin, yMin, xMax - xMin, yMax - yMin);
         }
 
-        private static float GetClampedAxis(float value, float min, float max, float fallback)
+        private float GetClampedAxis(float value, float min, float max, float fallback)
         {
             if (min > max)
             {
-                return fallback;
+                return followTargetWhenRoomFitsView ? value : fallback;
             }
 
             return Mathf.Clamp(value, min, max);

@@ -1,3 +1,4 @@
+using System.Collections;
 using NeonBreaker.Combat;
 using NeonBreaker.Pooling;
 using UnityEngine;
@@ -21,7 +22,7 @@ namespace NeonBreaker.Enemies
         [Header("VFX")]
         [SerializeField] private PoolKey hitVfxPoolKey;
         [SerializeField] private GameObject hitVfx;
-        [SerializeField] private bool playHitVfxOnDamage;
+        [SerializeField] private bool playHitVfxOnDamage = true;
         [SerializeField] private PoolKey basicAttackSlashVfxPoolKey;
         [SerializeField] private GameObject basicAttackSlashVfx;
         [SerializeField] private PoolKey criticalBasicAttackSlashVfxPoolKey;
@@ -45,7 +46,20 @@ namespace NeonBreaker.Enemies
         [SerializeField] private bool drawImpactVfxDebug;
         [SerializeField, Min(0.01f)] private float debugLineDuration = 0.25f;
 
+        [Header("Mechanical Hit Reaction")]
+        [SerializeField] private bool playMechanicalHitReaction = true;
+        [SerializeField] private Transform visualRoot;
+        [SerializeField, Min(0f)] private float hitSnapDistance = 0.07f;
+        [SerializeField, Min(0.01f)] private float hitSnapDuration = 0.035f;
+        [SerializeField, Min(0.01f)] private float hitReturnDuration = 0.08f;
+        [SerializeField, Range(0f, 20f)] private float hitAngularJolt = 5f;
+        [SerializeField] private Vector3 hitScaleJolt = new Vector3(1.08f, 0.92f, 1f);
+
         private SpriteRenderer[] spriteRenderers;
+        private Coroutine hitReactionRoutine;
+        private Vector3 visualBaseLocalPosition;
+        private Quaternion visualBaseLocalRotation = Quaternion.identity;
+        private Vector3 visualBaseLocalScale = Vector3.one;
 
         private void Awake()
         {
@@ -65,10 +79,15 @@ namespace NeonBreaker.Enemies
             }
 
             spriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
+            ResolveVisualRoot();
+            CacheVisualBaseTransform();
         }
 
         private void OnEnable()
         {
+            ResolveVisualRoot();
+            CacheVisualBaseTransform();
+
             if (health != null)
             {
                 health.Damaged += HandleDamaged;
@@ -91,19 +110,23 @@ namespace NeonBreaker.Enemies
             {
                 enemy.Died -= HandleDied;
             }
+
+            StopHitReaction(true);
         }
 
         private void HandleDamaged(DamageInfo damage)
         {
             AudioClip clip = damage.IsCritical && criticalHitClip != null ? criticalHitClip : hitClip;
-            GameObject hitImpactVfx = playHitVfxOnDamage ? hitVfx : null;
-            PoolKey hitImpactPoolKey = playHitVfxOnDamage ? hitVfxPoolKey : null;
+            bool shouldPlayHitImpactVfx = playHitVfxOnDamage || hitVfx != null || hitVfxPoolKey != null;
+            GameObject hitImpactVfx = shouldPlayHitImpactVfx ? hitVfx : null;
+            PoolKey hitImpactPoolKey = shouldPlayHitImpactVfx ? hitVfxPoolKey : null;
             GameObject slashVfx = ResolveBasicAttackSlashVfx(damage);
             PoolKey slashPoolKey = ResolveBasicAttackSlashVfxPoolKey(damage);
             Vector3 center = GetFeedbackCenter();
             GetImpactVfxTransform(damage, center, out Vector3 position, out Quaternion rotation);
             Quaternion damageRotation = GetRandomizedRotation(rotation, randomizeDamageVfxRotation, damageVfxRandomRotationRange);
 
+            PlayHitReaction(damage);
             Play(clip, center);
             Spawn(hitImpactVfx, hitImpactPoolKey, position, damageRotation, true);
             Spawn(slashVfx, slashPoolKey, center, damageRotation, true);
@@ -154,6 +177,180 @@ namespace NeonBreaker.Enemies
             }
 
             return transform.position;
+        }
+
+        private void PlayHitReaction(DamageInfo damage)
+        {
+            if (!playMechanicalHitReaction || visualRoot == null)
+            {
+                return;
+            }
+
+            StopHitReaction(false);
+            hitReactionRoutine = StartCoroutine(HitReactionRoutine(damage));
+        }
+
+        private IEnumerator HitReactionRoutine(DamageInfo damage)
+        {
+            Vector2 direction = damage.Direction;
+            if (direction.sqrMagnitude <= 0.0001f)
+            {
+                direction = transform.right;
+            }
+
+            direction.Normalize();
+            Vector3 worldOffset = (Vector3)(direction * hitSnapDistance);
+            Vector3 localOffset = visualRoot.parent != null
+                ? visualRoot.parent.InverseTransformVector(worldOffset)
+                : worldOffset;
+            float angularSign = Vector3.Cross(Vector3.right, direction).z >= 0f ? 1f : -1f;
+            Quaternion joltRotation = visualBaseLocalRotation * Quaternion.Euler(0f, 0f, hitAngularJolt * angularSign);
+            Vector3 joltScale = Vector3.Scale(visualBaseLocalScale, hitScaleJolt);
+
+            visualRoot.localPosition = visualBaseLocalPosition + localOffset;
+            visualRoot.localRotation = joltRotation;
+            visualRoot.localScale = joltScale;
+
+            if (hitSnapDuration > 0f)
+            {
+                yield return new WaitForSeconds(hitSnapDuration);
+            }
+
+            float timer = 0f;
+            Vector3 startPosition = visualRoot.localPosition;
+            Quaternion startRotation = visualRoot.localRotation;
+            Vector3 startScale = visualRoot.localScale;
+            float duration = Mathf.Max(0.01f, hitReturnDuration);
+
+            while (timer < duration)
+            {
+                timer += Time.deltaTime;
+                float t = Mathf.Clamp01(timer / duration);
+                float stepped = t < 0.55f ? 0.75f : 1f;
+                visualRoot.localPosition = Vector3.Lerp(startPosition, visualBaseLocalPosition, stepped);
+                visualRoot.localRotation = Quaternion.Lerp(startRotation, visualBaseLocalRotation, stepped);
+                visualRoot.localScale = Vector3.Lerp(startScale, visualBaseLocalScale, stepped);
+                yield return null;
+            }
+
+            RestoreVisualTransform();
+            hitReactionRoutine = null;
+        }
+
+        private void StopHitReaction(bool restore)
+        {
+            if (hitReactionRoutine != null)
+            {
+                StopCoroutine(hitReactionRoutine);
+                hitReactionRoutine = null;
+            }
+
+            if (restore)
+            {
+                RestoreVisualTransform();
+            }
+        }
+
+        private void RestoreVisualTransform()
+        {
+            if (visualRoot == null)
+            {
+                return;
+            }
+
+            visualRoot.localPosition = visualBaseLocalPosition;
+            visualRoot.localRotation = visualBaseLocalRotation;
+            visualRoot.localScale = visualBaseLocalScale;
+        }
+
+        private void CacheVisualBaseTransform()
+        {
+            if (visualRoot == null)
+            {
+                return;
+            }
+
+            visualBaseLocalPosition = visualRoot.localPosition;
+            visualBaseLocalRotation = visualRoot.localRotation;
+            visualBaseLocalScale = visualRoot.localScale;
+        }
+
+        private void ResolveVisualRoot()
+        {
+            if (visualRoot != null)
+            {
+                return;
+            }
+
+            visualRoot = FindVisualRoot(transform);
+            if (visualRoot != null)
+            {
+                return;
+            }
+
+            Animator animator = GetComponentInChildren<Animator>(true);
+            if (animator != null && animator.transform != transform)
+            {
+                visualRoot = animator.transform;
+                return;
+            }
+
+            if (spriteRenderers == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < spriteRenderers.Length; i++)
+            {
+                SpriteRenderer spriteRenderer = spriteRenderers[i];
+                if (spriteRenderer != null && spriteRenderer.transform != transform)
+                {
+                    visualRoot = spriteRenderer.transform;
+                    return;
+                }
+            }
+        }
+
+        private static Transform FindVisualRoot(Transform root)
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            Transform directMatch = root.Find("VisualRoot");
+            if (directMatch != null)
+            {
+                return directMatch;
+            }
+
+            directMatch = root.Find("Visual Root");
+            if (directMatch != null)
+            {
+                return directMatch;
+            }
+
+            return FindVisualRootRecursive(root);
+        }
+
+        private static Transform FindVisualRootRecursive(Transform current)
+        {
+            string normalizedName = current.name.Replace(" ", string.Empty).ToLowerInvariant();
+            if (normalizedName == "visualroot")
+            {
+                return current;
+            }
+
+            for (int i = 0; i < current.childCount; i++)
+            {
+                Transform match = FindVisualRootRecursive(current.GetChild(i));
+                if (match != null)
+                {
+                    return match;
+                }
+            }
+
+            return null;
         }
 
         private bool TryGetColliderBounds(out Bounds bounds)

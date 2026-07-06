@@ -1,4 +1,4 @@
-%YAML 1.1
+﻿%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!29 &1
 OcclusionCullingSettings:
@@ -164,7 +164,7 @@ MonoBehaviour:
   quitLabel: "\uB098\uAC00\uAE30"
   findBindingsInChildren: 1
   buildFallbackUiIfMissing: 1
-  selectStartButtonOnAwake: 1
+  selectStartButtonOnAwake: 0
 --- !u!114 &539621369
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1470,3 +1470,4 @@ SceneRoots:
   - {fileID: 1416482604}
   - {fileID: 539621372}
   - {fileID: 678699615}
+

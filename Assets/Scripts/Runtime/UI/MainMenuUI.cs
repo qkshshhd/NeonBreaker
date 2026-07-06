@@ -1,6 +1,9 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -16,8 +19,9 @@ namespace NeonBreaker.UI
         [SerializeField] private Button quitButton;
 
         [Header("Scene")]
-        [SerializeField] private string gameplaySceneName = "Game";
-        [SerializeField] private int fallbackGameplayBuildIndex = 1;
+        [SerializeField] private string gameplaySceneName = "GamePlay";
+        [SerializeField] private string fallbackGameplaySceneName = "GamePlay";
+        [SerializeField] private int fallbackGameplayBuildIndex = 0;
 
         [Header("Text")]
         [SerializeField] private string title = "NEON BREAKER";
@@ -28,7 +32,8 @@ namespace NeonBreaker.UI
         [Header("Options")]
         [SerializeField] private bool findBindingsInChildren = true;
         [SerializeField] private bool buildFallbackUiIfMissing = true;
-        [SerializeField] private bool selectStartButtonOnAwake = true;
+        [SerializeField] private bool selectStartButtonOnAwake;
+        [SerializeField] private bool useMouseFallbackInput = true;
 
         private void Awake()
         {
@@ -70,24 +75,84 @@ namespace NeonBreaker.UI
             UnbindButtons();
         }
 
+        private void Update()
+        {
+            if (!useMouseFallbackInput || !WasPrimaryMousePressedThisFrame())
+            {
+                return;
+            }
+
+            if (IsPointerOverButton(startButton))
+            {
+                StartGame();
+                return;
+            }
+
+            if (IsPointerOverButton(quitButton))
+            {
+                QuitGame();
+            }
+        }
+
         public void StartGame()
         {
             Time.timeScale = 1f;
 
-            if (!string.IsNullOrWhiteSpace(gameplaySceneName) && Application.CanStreamedLevelBeLoaded(gameplaySceneName))
+            if (TryLoadScene(gameplaySceneName))
             {
-                SceneManager.LoadScene(gameplaySceneName);
                 return;
             }
 
-            if (fallbackGameplayBuildIndex >= 0 && fallbackGameplayBuildIndex < SceneManager.sceneCountInBuildSettings)
+            if (TryLoadScene(fallbackGameplaySceneName))
             {
-                SceneManager.LoadScene(fallbackGameplayBuildIndex);
+                return;
             }
-            else
+
+            if (TryLoadScene(fallbackGameplayBuildIndex))
             {
-                Debug.LogError("[MainMenuUI] Gameplay scene is not configured. Set Gameplay Scene Name or Fallback Gameplay Build Index.", this);
+                return;
             }
+
+            if (SceneManager.sceneCountInBuildSettings > 0)
+            {
+                Scene activeScene = SceneManager.GetActiveScene();
+                for (int i = 0; i < SceneManager.sceneCountInBuildSettings; i++)
+                {
+                    if (i == activeScene.buildIndex && SceneManager.sceneCountInBuildSettings > 1)
+                    {
+                        continue;
+                    }
+
+                    SceneManager.LoadScene(i);
+                    return;
+                }
+            }
+
+            Debug.LogError(
+                $"[MainMenuUI] Gameplay scene could not be loaded. Tried '{gameplaySceneName}', '{fallbackGameplaySceneName}', and build index {fallbackGameplayBuildIndex}. Add GamePlay to Build Settings or set Gameplay Scene Name.",
+                this);
+        }
+
+        private static bool TryLoadScene(string sceneName)
+        {
+            if (string.IsNullOrWhiteSpace(sceneName) || !Application.CanStreamedLevelBeLoaded(sceneName))
+            {
+                return false;
+            }
+
+            SceneManager.LoadScene(sceneName);
+            return true;
+        }
+
+        private static bool TryLoadScene(int buildIndex)
+        {
+            if (buildIndex < 0 || buildIndex >= SceneManager.sceneCountInBuildSettings)
+            {
+                return false;
+            }
+
+            SceneManager.LoadScene(buildIndex);
+            return true;
         }
 
         public void QuitGame()
@@ -189,12 +254,14 @@ namespace NeonBreaker.UI
             {
                 startButton.onClick.AddListener(StartGame);
                 SetButtonLabel(startButton, startLabel);
+                EnsureHoverAnimation(startButton);
             }
 
             if (quitButton != null)
             {
                 quitButton.onClick.AddListener(QuitGame);
                 SetButtonLabel(quitButton, quitLabel);
+                EnsureHoverAnimation(quitButton);
             }
         }
 
@@ -241,7 +308,18 @@ namespace NeonBreaker.UI
 
             TextMeshProUGUI text = CreateText(buttonObject.transform, "Label", label, 22f, FontStyles.Bold, TextAlignmentOptions.Center);
             StretchToParent(text.rectTransform);
+            EnsureHoverAnimation(button);
             return button;
+        }
+
+        private static void EnsureHoverAnimation(Button button)
+        {
+            if (button == null || button.GetComponent<UIButtonHoverAnimator>() != null)
+            {
+                return;
+            }
+
+            button.gameObject.AddComponent<UIButtonHoverAnimator>();
         }
 
         private static TextMeshProUGUI CreateText(Transform parent, string objectName, string value, float size, FontStyles style, TextAlignmentOptions alignment)
@@ -308,6 +386,71 @@ namespace NeonBreaker.UI
             {
                 text.text = label;
             }
+        }
+
+        private static bool IsPointerOverButton(Button button)
+        {
+            if (button == null || !button.gameObject.activeInHierarchy || !button.interactable)
+            {
+                return false;
+            }
+
+            if (button.transform is not RectTransform rectTransform)
+            {
+                return false;
+            }
+
+            if (!TryGetPointerPosition(out Vector2 pointerPosition))
+            {
+                return false;
+            }
+
+            return RectTransformUtility.RectangleContainsScreenPoint(
+                rectTransform,
+                pointerPosition,
+                GetUiCamera(button));
+        }
+
+        private static Camera GetUiCamera(Component component)
+        {
+            Canvas canvas = component != null ? component.GetComponentInParent<Canvas>() : null;
+            if (canvas == null || canvas.renderMode == RenderMode.ScreenSpaceOverlay)
+            {
+                return null;
+            }
+
+            return canvas.worldCamera != null ? canvas.worldCamera : Camera.main;
+        }
+
+        private static bool WasPrimaryMousePressedThisFrame()
+        {
+#if ENABLE_INPUT_SYSTEM
+            if (Mouse.current != null)
+            {
+                return Mouse.current.leftButton.wasPressedThisFrame;
+            }
+
+            return false;
+#else
+            return Input.GetMouseButtonDown(0);
+#endif
+        }
+
+        private static bool TryGetPointerPosition(out Vector2 pointerPosition)
+        {
+#if ENABLE_INPUT_SYSTEM
+            if (Mouse.current != null)
+            {
+                pointerPosition = Mouse.current.position.ReadValue();
+                return true;
+            }
+
+            pointerPosition = default;
+            return false;
+#else
+            pointerPosition = Input.mousePosition;
+            return true;
+#endif
         }
     }
 }

@@ -61,7 +61,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: a97c105638bdf8b4a8650670310a4cd3, type: 2}
+  - {fileID: 2100000, guid: dfbd9de8a97196f48a9b5a52f6149e3c, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -146,15 +146,17 @@ MonoBehaviour:
   returnBeforeAnimatorLoops: 1
   animationReturnLeadTime: 0
   animationReturnPadding: 0
+  animatorHideNormalizedTime: 0.98
+  maxAnimatorLifetime: 10
   hideRenderersBeforeReturn: 1
   rendererHideLeadTime: 0.001
   restartAnimatorOnSpawn: 1
   restartParticlesOnSpawn: 1
   autoPlayWhenUnpooled: 1
-  destroyWhenUnpooled: 1
   lockWorldTransformDuringLifetime: 1
   multiplyLockedScaleByPrefabScale: 1
   animator: {fileID: 650289444064708452}
   visualRoot: {fileID: 8076647941364998369}
   visualRootBaseScale: {x: 1, y: 1, z: 1}
+  overrideVisualRootBaseScale: 0
   useSpriteRendererFlipForVisualFlip: 0

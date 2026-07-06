@@ -10,6 +10,10 @@ namespace NeonBreaker.Player
         [SerializeField] private float deceleration = 100f;
         [SerializeField] private bool setRigidbodyInterpolation = true;
         [SerializeField] private RigidbodyInterpolation2D interpolation = RigidbodyInterpolation2D.Interpolate;
+        [SerializeField] private bool setCollisionDetectionMode = true;
+        [SerializeField] private CollisionDetectionMode2D collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+        [SerializeField] private bool freezeRigidbodyRotation = true;
+        [SerializeField] private bool normalizeMoveInput = true;
 
         private Rigidbody2D body;
         private PlayerStats stats;
@@ -26,6 +30,16 @@ namespace NeonBreaker.Player
             {
                 body.interpolation = interpolation;
             }
+
+            if (setCollisionDetectionMode)
+            {
+                body.collisionDetectionMode = collisionDetectionMode;
+            }
+
+            if (freezeRigidbodyRotation)
+            {
+                body.freezeRotation = true;
+            }
         }
 
         public void Configure(PlayerDefinition definition)
@@ -37,6 +51,11 @@ namespace NeonBreaker.Player
 
         public void Move(Vector2 moveInput)
         {
+            if (normalizeMoveInput && moveInput.sqrMagnitude > 1f)
+            {
+                moveInput.Normalize();
+            }
+
             float effectiveMoveSpeed = stats != null ? stats.GetMoveSpeed(moveSpeed) : moveSpeed;
             Vector2 targetVelocity = CanMove ? moveInput * effectiveMoveSpeed : Vector2.zero;
             float rate = targetVelocity.sqrMagnitude > 0.0001f ? acceleration : deceleration;
