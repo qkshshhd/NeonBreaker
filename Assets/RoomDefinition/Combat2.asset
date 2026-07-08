@@ -18,7 +18,7 @@ MonoBehaviour:
   unlockExitOnClear: 1
   clearDelay: 1
   waves:
-  - displayName: "\u3147"
+  - displayName: 
     startDelay: 1
     spawnGroups:
     - poolKey: {fileID: 11400000, guid: cbda9eb0a059f4348b058d2df9b2362b, type: 2}
@@ -29,7 +29,7 @@ MonoBehaviour:
       count: 1
       spawnInterval: 1
       startDelay: 3
-  - displayName: "\u3147"
+  - displayName: 
     startDelay: 2
     spawnGroups:
     - poolKey: {fileID: 11400000, guid: 566b50d07bd97034ea900b6d768768e7, type: 2}

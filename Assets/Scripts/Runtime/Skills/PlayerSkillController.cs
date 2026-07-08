@@ -9,6 +9,7 @@ namespace NeonBreaker.Skills
 {
     [RequireComponent(typeof(PlayerInputReader))]
     [RequireComponent(typeof(PlayerStats))]
+    [RequireComponent(typeof(PlayerRecoilCore))]
     public sealed class PlayerSkillController : MonoBehaviour
     {
         [SerializeField] private SkillDefinition equippedSkill;
@@ -23,8 +24,10 @@ namespace NeonBreaker.Skills
         private readonly HashSet<IDamageable> damagedTargets = new HashSet<IDamageable>();
         private PlayerInputReader input;
         private PlayerStats stats;
+        private PlayerRecoilCore recoilCore;
         private Collider2D[] hitBuffer;
         private float cooldownTimer;
+        private float pendingRecoilDischargeRatio;
         private Coroutine castRoutine;
 
         public event Action<SkillDefinition> SkillStarted;
@@ -49,6 +52,11 @@ namespace NeonBreaker.Skills
         {
             input = GetComponent<PlayerInputReader>();
             stats = GetComponent<PlayerStats>();
+            recoilCore = GetComponent<PlayerRecoilCore>();
+            if (recoilCore == null)
+            {
+                recoilCore = gameObject.AddComponent<PlayerRecoilCore>();
+            }
 
             if (skillOrigin == null)
             {
@@ -103,6 +111,7 @@ namespace NeonBreaker.Skills
             EnsureHitBuffer();
             SkillDefinition skill = equippedSkill;
             cooldownTimer = GetEffectiveCooldown();
+            pendingRecoilDischargeRatio = recoilCore != null ? recoilCore.BeginSkillDischarge() : 1f;
             SkillStarted?.Invoke(skill);
             castRoutine = StartCoroutine(CastRoutine(skill));
             return true;
@@ -149,7 +158,11 @@ namespace NeonBreaker.Skills
             filter.useTriggers = Physics2D.queriesHitTriggers;
 
             float effectiveRadius = stats != null ? stats.GetSkillRadius(skill.Radius) : skill.Radius;
+            float recoilKnockbackMultiplier = recoilCore != null
+                ? recoilCore.GetSkillKnockbackMultiplier(pendingRecoilDischargeRatio)
+                : 1f;
             float effectiveKnockback = stats != null ? stats.GetKnockback(skill.KnockbackForce) : skill.KnockbackForce;
+            effectiveKnockback *= recoilKnockbackMultiplier;
             int count = Physics2D.OverlapCircle(origin, effectiveRadius, filter, hitBuffer);
             int successfulHits = 0;
 
@@ -177,7 +190,11 @@ namespace NeonBreaker.Skills
                 }
 
                 hitDirection.Normalize();
+                float recoilDamageMultiplier = recoilCore != null
+                    ? recoilCore.GetSkillDamageMultiplier(pendingRecoilDischargeRatio)
+                    : 1f;
                 float finalDamage = stats != null ? stats.GetSkillDamage(skill.Damage) : skill.Damage;
+                finalDamage *= recoilDamageMultiplier;
                 DamageInfo damageInfo = new DamageInfo(
                     finalDamage,
                     targetPoint,

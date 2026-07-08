@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using NeonBreaker.Combat;
 using NeonBreaker.Dungeon;
+using NeonBreaker.Environment;
 using NeonBreaker.Pooling;
+using NeonBreaker.Tutorial;
 using UnityEngine;
 
 namespace NeonBreaker.Rooms
@@ -13,6 +15,10 @@ namespace NeonBreaker.Rooms
         [SerializeField] private EnemySpawner enemySpawner;
         [SerializeField] private TilemapDungeonGenerator dungeonGenerator;
         [SerializeField] private RoomExit roomExit;
+
+        [Header("Visual Polish")]
+        [SerializeField] private bool addDefaultRoomAtmosphere = true;
+        [SerializeField] private bool addDefaultTutorialManager = true;
 
         [Header("Room Sequence")]
         [SerializeField] private RoomDefinition[] roomSequence;
@@ -112,6 +118,9 @@ namespace NeonBreaker.Rooms
                 roomExit.SetRunManager(this);
                 roomExit.SetUnlocked(false);
             }
+
+            EnsureDefaultRoomAtmosphere();
+            EnsureDefaultTutorialManager();
         }
 
         private void OnEnable()
@@ -182,6 +191,26 @@ namespace NeonBreaker.Rooms
             {
                 Debug.LogError($"[RoomRunManager] Failed to generate room sequence: {exception.Message}", this);
             }
+        }
+
+        private void EnsureDefaultRoomAtmosphere()
+        {
+            if (!addDefaultRoomAtmosphere || FindAnyObjectByType<RoomAtmosphere2D>() != null)
+            {
+                return;
+            }
+
+            gameObject.AddComponent<RoomAtmosphere2D>();
+        }
+
+        private void EnsureDefaultTutorialManager()
+        {
+            if (!addDefaultTutorialManager || FindAnyObjectByType<TutorialManager>() != null)
+            {
+                return;
+            }
+
+            gameObject.AddComponent<TutorialManager>();
         }
 
         [ContextMenu("Validate Room Setup")]

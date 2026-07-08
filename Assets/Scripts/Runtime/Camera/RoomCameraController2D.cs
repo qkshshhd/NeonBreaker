@@ -29,6 +29,7 @@ namespace NeonBreaker.CameraSystem
         [SerializeField, Min(0f)] private float roomPadding = 0.5f;
         [SerializeField] private bool useActualRoomFloorBounds = true;
         [SerializeField] private bool followTargetWhenRoomFitsView = true;
+        [SerializeField] private bool lockToRoomCenterWhenRoomFitsViewDuringCombat = true;
         [SerializeField] private bool includeCorridorWhileRoomCleared = true;
         [SerializeField] private bool freeFollowWhileMovingBetweenRooms = true;
         [SerializeField] private bool freeFollowInRestRooms = true;
@@ -286,9 +287,10 @@ namespace NeonBreaker.CameraSystem
             Vector3 min = activeRoomBounds.min + Vector3.one * roomPadding;
             Vector3 max = activeRoomBounds.max - Vector3.one * roomPadding;
             Vector3 center = activeRoomBounds.center;
+            bool followWhenRoomFitsView = ShouldFollowTargetWhenRoomFitsView();
 
-            desired.x = GetClampedAxis(desired.x, min.x + halfWidth, max.x - halfWidth, center.x);
-            desired.y = GetClampedAxis(desired.y, min.y + halfHeight, max.y - halfHeight, center.y);
+            desired.x = GetClampedAxis(desired.x, min.x + halfWidth, max.x - halfWidth, center.x, followWhenRoomFitsView);
+            desired.y = GetClampedAxis(desired.y, min.y + halfHeight, max.y - halfHeight, center.y, followWhenRoomFitsView);
             return desired;
         }
 
@@ -368,6 +370,16 @@ namespace NeonBreaker.CameraSystem
                 && runManager != null
                 && runManager.IsWaitingForExit
                 && runManager.HasNextRoom;
+        }
+
+        private bool ShouldFollowTargetWhenRoomFitsView()
+        {
+            if (!followTargetWhenRoomFitsView)
+            {
+                return false;
+            }
+
+            return !lockToRoomCenterWhenRoomFitsViewDuringCombat || ShouldFreeFollowBetweenRooms();
         }
 
         private void RefreshRoomBounds()
@@ -468,11 +480,11 @@ namespace NeonBreaker.CameraSystem
             return new RectInt(xMin, yMin, xMax - xMin, yMax - yMin);
         }
 
-        private float GetClampedAxis(float value, float min, float max, float fallback)
+        private float GetClampedAxis(float value, float min, float max, float fallback, bool followWhenRoomFitsView)
         {
             if (min > max)
             {
-                return followTargetWhenRoomFitsView ? value : fallback;
+                return followWhenRoomFitsView ? value : fallback;
             }
 
             return Mathf.Clamp(value, min, max);

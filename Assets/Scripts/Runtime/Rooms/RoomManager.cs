@@ -32,6 +32,7 @@ namespace NeonBreaker.Rooms
         private PlayerController playerController;
         private bool bossRoomStartControlLocked;
         private bool previousCanMove;
+        private int combatStartLockCount;
 
         public event Action<RoomDefinition> RoomStarted;
         public event Action<RoomDefinition, string, string, float> RoomIntroStarted;
@@ -46,6 +47,7 @@ namespace NeonBreaker.Rooms
         public int AliveEnemyCount => aliveEnemyCount;
         public bool IsRunning => isRunning;
         public bool IsCleared => isCleared;
+        public bool IsCombatStartLocked => combatStartLockCount > 0;
 
         public void SetSpawner(EnemySpawner enemySpawner)
         {
@@ -55,6 +57,16 @@ namespace NeonBreaker.Rooms
         public void SetDifficultyContext(DifficultyContext context)
         {
             difficultyContext = context;
+        }
+
+        public void PushCombatStartLock(object owner)
+        {
+            combatStartLockCount++;
+        }
+
+        public void ReleaseCombatStartLock(object owner)
+        {
+            combatStartLockCount = Mathf.Max(0, combatStartLockCount - 1);
         }
 
         private void Awake()
@@ -122,6 +134,11 @@ namespace NeonBreaker.Rooms
             if (!playBossIntroAfterFirstSpawn)
             {
                 yield return RoomIntroRoutine(room);
+            }
+
+            while (combatStartLockCount > 0)
+            {
+                yield return null;
             }
 
             if (room.Waves != null)

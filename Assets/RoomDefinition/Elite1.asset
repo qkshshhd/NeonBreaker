@@ -18,7 +18,7 @@ MonoBehaviour:
   unlockExitOnClear: 1
   clearDelay: 0.4
   waves:
-  - displayName: "\uBB50\uC57C \uC774\uAC70"
+  - displayName: 
     startDelay: 1
     spawnGroups:
     - poolKey: {fileID: 11400000, guid: 2a7f27529e2097a44a94f5a2f2b7eee9, type: 2}
@@ -29,7 +29,7 @@ MonoBehaviour:
       count: 1
       spawnInterval: 0.2
       startDelay: 1
-  - displayName: "\uBB50\uC57C \uC774\uAC70"
+  - displayName: 
     startDelay: 1
     spawnGroups:
     - poolKey: {fileID: 11400000, guid: cbda9eb0a059f4348b058d2df9b2362b, type: 2}

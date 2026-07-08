@@ -225,7 +225,7 @@ ParticleSystem:
       serializedVersion: 2
       minMaxState: 0
       minColor: {r: 1, g: 1, b: 1, a: 1}
-      maxColor: {r: 1, g: 1, b: 1, a: 1}
+      maxColor: {r: 0.043396115, g: 0.48074508, b: 1, a: 1}
       maxGradient:
         serializedVersion: 2
         key0: {r: 1, g: 1, b: 1, a: 1}
@@ -4842,7 +4842,7 @@ ParticleSystemRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: cd4613c08dc18c54c8a656a99ab0cdba, type: 2}
+  - {fileID: 2100000, guid: d7c11f4008ed98f43af5f1afa71e0b8d, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -4926,15 +4926,17 @@ MonoBehaviour:
   returnBeforeAnimatorLoops: 1
   animationReturnLeadTime: 0.02
   animationReturnPadding: 0
+  animatorHideNormalizedTime: 0.98
+  maxAnimatorLifetime: 10
   hideRenderersBeforeReturn: 1
   rendererHideLeadTime: 0.06
   restartAnimatorOnSpawn: 1
   restartParticlesOnSpawn: 1
   autoPlayWhenUnpooled: 1
-  destroyWhenUnpooled: 1
   lockWorldTransformDuringLifetime: 1
   multiplyLockedScaleByPrefabScale: 1
   animator: {fileID: 0}
   visualRoot: {fileID: 0}
   visualRootBaseScale: {x: 1, y: 1, z: 1}
+  overrideVisualRootBaseScale: 0
   useSpriteRendererFlipForVisualFlip: 1

@@ -32,6 +32,57 @@ namespace NeonBreaker.Dungeon
             Courtyard
         }
 
+        private readonly struct BoundaryLineKey : IEquatable<BoundaryLineKey>
+        {
+            public BoundaryLineKey(bool horizontal, int fixedLine, int outwardSign)
+            {
+                Horizontal = horizontal;
+                FixedLine = fixedLine;
+                OutwardSign = outwardSign;
+            }
+
+            public readonly bool Horizontal;
+            public readonly int FixedLine;
+            public readonly int OutwardSign;
+
+            public bool Equals(BoundaryLineKey other)
+            {
+                return Horizontal == other.Horizontal
+                    && FixedLine == other.FixedLine
+                    && OutwardSign == other.OutwardSign;
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is BoundaryLineKey other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    int hash = Horizontal ? 17 : 31;
+                    hash = hash * 397 ^ FixedLine;
+                    hash = hash * 397 ^ OutwardSign;
+                    return hash;
+                }
+            }
+        }
+
+        private readonly struct ReentrantCornerCollision
+        {
+            public ReentrantCornerCollision(Vector3Int cell, Vector2Int openA, Vector2Int openB)
+            {
+                Cell = cell;
+                OpenA = openA;
+                OpenB = openB;
+            }
+
+            public readonly Vector3Int Cell;
+            public readonly Vector2Int OpenA;
+            public readonly Vector2Int OpenB;
+        }
+
         [Header("Tilemaps")]
         [SerializeField] private Tilemap floorTilemap;
         [SerializeField] private Tilemap wallTilemap;
@@ -60,6 +111,16 @@ namespace NeonBreaker.Dungeon
         [SerializeField] private int wallThickness = 1;
         [SerializeField] private int doorThickness = 1;
         [SerializeField] private int roomTriggerPadding = 1;
+
+        [Header("Boss Room")]
+        [SerializeField] private bool forceBossRoomSquare = true;
+        [SerializeField, Min(4)] private int bossRoomSize = 18;
+        [SerializeField] private bool keepBossRoomRectangular = true;
+
+        [Header("Tutorial Room")]
+        [SerializeField] private bool forceTutorialRoomSquare = true;
+        [SerializeField, Min(4)] private int tutorialRoomSize = 14;
+        [SerializeField] private bool keepTutorialRoomRectangular = true;
 
         [Header("Room Dressing")]
         [SerializeField] private bool decorateRooms = true;
@@ -90,6 +151,9 @@ namespace NeonBreaker.Dungeon
         [Header("Room Outline")]
         [SerializeField] private bool useDirectionalOutlineTiles = true;
         [SerializeField] private bool suppressDoorwayOuterCornerTiles = true;
+        [SerializeField] private bool useBoundaryBoxWallColliders = true;
+        [SerializeField, Min(0.02f)] private float wallBoundaryColliderThickness = 0.18f;
+        [SerializeField, Min(0f)] private float wallBoundaryColliderOutwardOffsetCells = 1f;
         [SerializeField] private bool collideOuterCornerTiles = false;
         [SerializeField] private bool sealCornerCollisionGaps = true;
         [SerializeField, Min(0)] private int wallCollisionOutwardOffset = 1;
@@ -98,6 +162,8 @@ namespace NeonBreaker.Dungeon
         [Header("Room Doors")]
         [SerializeField] private bool rotateDoorTilesByDirection = true;
         [SerializeField] private bool useDoorTilemapCollider;
+        [SerializeField] private bool fitDoorWidthToCorridor = true;
+        [SerializeField, Min(1)] private int doorWidthProbeDepth = 2;
         [SerializeField] private DoorSpriteFacing doorSpriteDefaultFacing = DoorSpriteFacing.Up;
         [SerializeField, Min(0)] private int doorBlockerSidePaddingCells = 2;
         [SerializeField, Min(0f)] private float doorBlockerDepthPaddingCells = 0.5f;
@@ -120,6 +186,7 @@ namespace NeonBreaker.Dungeon
         private readonly List<Tilemap> doorTilemaps = new List<Tilemap>();
         private readonly List<TilemapCollider2D> doorColliders = new List<TilemapCollider2D>();
         private readonly List<BoxCollider2D> doorBlockers = new List<BoxCollider2D>();
+        private readonly List<BoxCollider2D> wallBoundaryColliders = new List<BoxCollider2D>();
         private readonly List<RoomTemplateDoor2D> templateDoors = new List<RoomTemplateDoor2D>();
         private readonly List<Vector3> doorWorldCenters = new List<Vector3>();
         private readonly List<RoomTemplate2D> roomTemplateInstances = new List<RoomTemplate2D>();
@@ -128,6 +195,7 @@ namespace NeonBreaker.Dungeon
         private RoomDefinition[] activeRoomDefinitions;
         private Transform templateRoomRoot;
         private Transform doorRoot;
+        private Transform wallBoundaryColliderRoot;
         private Transform roomTriggerRoot;
         private bool subscribedToRunManager;
 
@@ -637,7 +705,7 @@ namespace NeonBreaker.Dungeon
                 tilemapCollider = colliderTilemap.gameObject.AddComponent<TilemapCollider2D>();
             }
 
-            tilemapCollider.enabled = true;
+            tilemapCollider.enabled = !useBoundaryBoxWallColliders;
         }
 
         private void Clear()
@@ -670,6 +738,7 @@ namespace NeonBreaker.Dungeon
             }
             ClearGeneratedTemplateRooms();
             ClearGeneratedDoors();
+            ClearGeneratedWallBoundaryColliders();
             ClearGeneratedRoomTriggers();
         }
 
@@ -679,13 +748,13 @@ namespace NeonBreaker.Dungeon
             Vector2Int center = Vector2Int.zero;
             Vector2Int previousDirection = Vector2Int.right;
 
-            Vector2Int firstSize = GetRandomRoomSize();
+            Vector2Int firstSize = GetRoomSizeForIndex(0);
             RectInt firstRoom = CreateCenteredRoom(center, firstSize);
             generatedRooms.Add(firstRoom);
 
             for (int i = 1; i < safeRoomCount; i++)
             {
-                Vector2Int size = GetRandomRoomSize();
+                Vector2Int size = GetRoomSizeForIndex(i);
                 RectInt previousRoom = generatedRooms[generatedRooms.Count - 1];
 
                 if (!TryCreateSeparatedRoom(previousRoom, center, size, previousDirection, out RectInt room, out Vector2Int nextCenter, out Vector2Int nextDirection))
@@ -852,6 +921,39 @@ namespace NeonBreaker.Dungeon
             return new Vector2Int(
                 Mathf.Max(4, width),
                 Mathf.Max(4, height));
+        }
+
+        private Vector2Int GetRoomSizeForIndex(int roomIndex)
+        {
+            if (forceTutorialRoomSquare && IsTutorialRoomIndex(roomIndex))
+            {
+                int size = Mathf.Max(4, tutorialRoomSize);
+                return new Vector2Int(size, size);
+            }
+
+            if (forceBossRoomSquare && IsBossRoomIndex(roomIndex))
+            {
+                int size = Mathf.Max(4, bossRoomSize);
+                return new Vector2Int(size, size);
+            }
+
+            return GetRandomRoomSize();
+        }
+
+        private bool IsBossRoomIndex(int roomIndex)
+        {
+            if (roomIndex < 0 || activeRoomDefinitions == null || roomIndex >= activeRoomDefinitions.Length)
+            {
+                return false;
+            }
+
+            RoomDefinition roomDefinition = activeRoomDefinitions[roomIndex];
+            return roomDefinition != null && roomDefinition.RoomType == RoomType.Boss;
+        }
+
+        private static bool IsTutorialRoomIndex(int roomIndex)
+        {
+            return roomIndex == 0;
         }
 
         private static RectInt CreateCenteredRoom(Vector2Int center, Vector2Int size)
@@ -1791,18 +1893,20 @@ namespace NeonBreaker.Dungeon
             List<Vector3Int> roomCells = roomFloorCells[roomIndex];
             roomCells.Clear();
 
+            bool keepRectangular = (keepBossRoomRectangular && IsBossRoomIndex(roomIndex))
+                || (keepTutorialRoomRectangular && IsTutorialRoomIndex(roomIndex));
             RoomShapeMask shape = RoomShapeMask.Create(
                 room,
-                varyRoomShapes,
-                useStructuredRoomShapes,
-                structuredRoomChance,
+                !keepRectangular && varyRoomShapes,
+                !keepRectangular && useStructuredRoomShapes,
+                keepRectangular ? 0f : structuredRoomChance,
                 structureArmMinWidth,
                 structureOuterPadding,
-                allowEdgeCutsOnStructuredRooms,
-                cornerCutChance,
+                !keepRectangular && allowEdgeCutsOnStructuredRooms,
+                keepRectangular ? 0f : cornerCutChance,
                 cornerCutSize,
-                edgeCutChance,
-                maxEdgeCutsPerRoom,
+                keepRectangular ? 0f : edgeCutChance,
+                keepRectangular ? 0 : maxEdgeCutsPerRoom,
                 edgeCutDepthRange,
                 edgeCutLengthRange);
             for (int x = room.xMin; x < room.xMax; x++)
@@ -1872,8 +1976,8 @@ namespace NeonBreaker.Dungeon
         private int AddDoorCells(RectInt room, Vector2Int roomCenter, Vector2Int direction)
         {
             Vector2Int center = GetDoorCenter(room, roomCenter, direction) + direction;
-            GetDoorWidthOffsets(center, direction, out int minOffset, out int maxOffset);
             int thickness = Mathf.Max(1, doorThickness);
+            GetDoorWidthOffsets(center, direction, thickness, out int minOffset, out int maxOffset);
             List<Vector3Int> cells = new List<Vector3Int>();
 
             for (int widthOffset = minOffset; widthOffset <= maxOffset; widthOffset++)
@@ -1906,21 +2010,104 @@ namespace NeonBreaker.Dungeon
             return doorCellGroups.Count - 1;
         }
 
-        private void GetDoorWidthOffsets(Vector2Int center, Vector2Int direction, out int minOffset, out int maxOffset)
+        private void GetDoorWidthOffsets(Vector2Int center, Vector2Int direction, int thickness, out int minOffset, out int maxOffset)
         {
             GetCenteredWidthOffsets(corridorWidth, out minOffset, out maxOffset);
+            if (fitDoorWidthToCorridor
+                && TryGetDoorwayPassageWidthOffsets(center, direction, out int corridorMinOffset, out int corridorMaxOffset))
+            {
+                minOffset = corridorMinOffset;
+                maxOffset = corridorMaxOffset;
+            }
+        }
+
+        private bool TryGetDoorwayPassageWidthOffsets(Vector2Int center, Vector2Int direction, out int minOffset, out int maxOffset)
+        {
+            minOffset = 0;
+            maxOffset = 0;
+            if (direction == Vector2Int.zero)
+            {
+                return false;
+            }
 
             Vector2Int perpendicular = direction.x != 0 ? Vector2Int.up : Vector2Int.right;
-            int maxScanDistance = Mathf.Max(corridorWidth + 4, corridorWidth + doorBlockerSidePaddingCells * 2 + 2);
-            while (minOffset > -maxScanDistance && HasFloor(center + perpendicular * (minOffset - 1)))
+            int probeDepth = Mathf.Max(doorWidthProbeDepth, doorThickness + 2);
+            int maxScanDistance = Mathf.Max(corridorWidth + doorBlockerSidePaddingCells * 2 + 8, 12);
+            bool found = false;
+            bool inRun = false;
+            int runStart = 0;
+            int bestMin = 0;
+            int bestMax = 0;
+            int bestDistance = int.MaxValue;
+
+            for (int offset = -maxScanDistance; offset <= maxScanDistance; offset++)
             {
-                minOffset--;
+                bool passable = HasDoorwayPassageAtOffset(center, direction, perpendicular, probeDepth, offset);
+                if (passable && !inRun)
+                {
+                    inRun = true;
+                    runStart = offset;
+                }
+
+                bool closesRun = inRun && (!passable || offset == maxScanDistance);
+                if (!closesRun)
+                {
+                    continue;
+                }
+
+                int runEnd = passable && offset == maxScanDistance ? offset : offset - 1;
+                int distanceToZero = runStart > 0 ? runStart : runEnd < 0 ? -runEnd : 0;
+                if (!found || distanceToZero < bestDistance)
+                {
+                    found = true;
+                    bestDistance = distanceToZero;
+                    bestMin = runStart;
+                    bestMax = runEnd;
+                }
+
+                inRun = false;
             }
 
-            while (maxOffset < maxScanDistance && HasFloor(center + perpendicular * (maxOffset + 1)))
+            if (!found)
             {
-                maxOffset++;
+                return false;
             }
+
+            minOffset = bestMin;
+            maxOffset = bestMax;
+            return true;
+        }
+
+        private bool HasDoorwayPassageAtOffset(
+            Vector2Int center,
+            Vector2Int direction,
+            Vector2Int perpendicular,
+            int probeDepth,
+            int widthOffset)
+        {
+            Vector2Int baseCell = center + perpendicular * widthOffset;
+            bool hasRoomSideFloor = false;
+            bool hasCorridorSideFloor = false;
+
+            for (int depth = 1; depth <= probeDepth; depth++)
+            {
+                if (!hasRoomSideFloor && HasFloor(baseCell - direction * depth))
+                {
+                    hasRoomSideFloor = true;
+                }
+
+                if (!hasCorridorSideFloor && HasFloor(baseCell + direction * (depth - 1)))
+                {
+                    hasCorridorSideFloor = true;
+                }
+
+                if (hasRoomSideFloor && hasCorridorSideFloor)
+                {
+                    return true;
+                }
+            }
+
+            return hasRoomSideFloor && hasCorridorSideFloor;
         }
 
         private static void GetCenteredWidthOffsets(int width, out int minOffset, out int maxOffset)
@@ -2083,6 +2270,9 @@ namespace NeonBreaker.Dungeon
                     SetWallCollisionTile(cell, wallTile);
                 }
             }
+
+            PostProcessWallCollisionCorners();
+            BuildBoundaryWallColliders();
         }
 
         private void SetWallCollisionTile(Vector3Int cell, TileBase tile)
@@ -2092,7 +2282,7 @@ namespace NeonBreaker.Dungeon
 
         private void SetWallCollisionTile(Vector3Int cell, TileBase tile, DungeonTileSet.OutlineDirection? direction)
         {
-            if (!addWallCollider || wallCollisionTilemap == null)
+            if (!addWallCollider || wallCollisionTilemap == null || useBoundaryBoxWallColliders)
             {
                 return;
             }
@@ -2103,9 +2293,41 @@ namespace NeonBreaker.Dungeon
                 collisionTile = tileSet.GetRandomOutlineTile(DungeonTileSet.OutlineDirection.North);
             }
 
-            Vector3Int collisionCell = direction.HasValue
-                ? GetOffsetWallCollisionCell(cell, direction.Value)
-                : cell;
+            Vector3Int collisionCell = cell;
+            if (direction.HasValue)
+            {
+                DungeonTileSet.OutlineDirection outlineDirection = direction.Value;
+                if (IsAnyCornerDirection(outlineDirection))
+                {
+                    if (TryGetReentrantCornerOpenDirections(cell, out _, out _))
+                    {
+                        // Reentrant corners block the actual corner cell. Straight-wall offset
+                        // cells around this corner are pruned in SealCornerCollisionGap.
+                        collisionCell = cell;
+                    }
+                    else if (TryGetConvexCornerOutwardDirection(cell, out Vector2Int convexOutward))
+                    {
+                        if (!sealCornerCollisionGaps && !collideOuterCornerTiles)
+                        {
+                            return;
+                        }
+
+                        int offset = Mathf.Max(0, wallCollisionOutwardOffset);
+                        collisionCell = new Vector3Int(
+                            cell.x + convexOutward.x * offset,
+                            cell.y + convexOutward.y * offset,
+                            cell.z);
+                    }
+                    else
+                    {
+                        collisionCell = cell;
+                    }
+                }
+                else
+                {
+                    collisionCell = GetOffsetWallCollisionCell(cell, outlineDirection);
+                }
+            }
 
             if (floorCells.Contains(collisionCell) || IsDoorCell(collisionCell))
             {
@@ -2122,26 +2344,301 @@ namespace NeonBreaker.Dungeon
                 return;
             }
 
+            if (!TryGetReentrantCornerOpenDirections(cell, out Vector2Int openA, out Vector2Int openB))
+            {
+                return;
+            }
+
             TileBase collisionTile = tile != null ? tile : tileSet.GetRandomWallTile();
             if (collisionTile == null)
             {
                 collisionTile = tileSet.GetRandomOutlineTile(DungeonTileSet.OutlineDirection.North);
             }
 
-            Vector2Int outward = GetOutlineOutwardDirection(direction);
-            if (outward.x == 0 || outward.y == 0)
+            // Inner/reentrant corners need a blocker on the visible corner cell itself.
+            // Side-arm pruning is done after all walls are stamped, otherwise a later straight
+            // wall can recreate the protruding cell.
+            TrySetWallCollisionCell(cell, collisionTile);
+        }
+
+        private void PostProcessWallCollisionCorners()
+        {
+            if (!addWallCollider || wallCollisionTilemap == null || !sealCornerCollisionGaps || useBoundaryBoxWallColliders)
+            {
+                return;
+            }
+
+            TileBase collisionTile = tileSet != null ? tileSet.GetRandomWallTile() : null;
+            if (collisionTile == null && tileSet != null)
+            {
+                collisionTile = tileSet.GetRandomOutlineTile(DungeonTileSet.OutlineDirection.North);
+            }
+
+            if (collisionTile == null)
+            {
+                return;
+            }
+
+            List<ReentrantCornerCollision> corners = new List<ReentrantCornerCollision>();
+            foreach (Vector3Int cell in wallCells)
+            {
+                if (floorCells.Contains(cell) || IsDoorCell(cell))
+                {
+                    continue;
+                }
+
+                if (!TryGetReentrantCornerOpenDirections(cell, out Vector2Int openA, out Vector2Int openB))
+                {
+                    continue;
+                }
+
+                corners.Add(new ReentrantCornerCollision(cell, openA, openB));
+            }
+
+            for (int i = 0; i < corners.Count; i++)
+            {
+                ReentrantCornerCollision corner = corners[i];
+                ClearReentrantCornerSideProtrusions(corner.Cell, corner.OpenA, corner.OpenB);
+            }
+
+            for (int i = 0; i < corners.Count; i++)
+            {
+                TrySetWallCollisionCell(corners[i].Cell, collisionTile);
+            }
+        }
+
+        private void BuildBoundaryWallColliders()
+        {
+            if (!addWallCollider || !useBoundaryBoxWallColliders || floorTilemap == null)
+            {
+                return;
+            }
+
+            ClearGeneratedWallBoundaryColliders();
+
+            Dictionary<BoundaryLineKey, List<int>> boundaryLines = new Dictionary<BoundaryLineKey, List<int>>();
+            foreach (Vector3Int floor in floorCells)
+            {
+                if (!HasFloor(floor.x, floor.y + 1))
+                {
+                    AddBoundaryLineCell(boundaryLines, new BoundaryLineKey(true, floor.y + 1, 1), floor.x);
+                }
+
+                if (!HasFloor(floor.x, floor.y - 1))
+                {
+                    AddBoundaryLineCell(boundaryLines, new BoundaryLineKey(true, floor.y, -1), floor.x);
+                }
+
+                if (!HasFloor(floor.x + 1, floor.y))
+                {
+                    AddBoundaryLineCell(boundaryLines, new BoundaryLineKey(false, floor.x + 1, 1), floor.y);
+                }
+
+                if (!HasFloor(floor.x - 1, floor.y))
+                {
+                    AddBoundaryLineCell(boundaryLines, new BoundaryLineKey(false, floor.x, -1), floor.y);
+                }
+            }
+
+            Transform parent = GetWallBoundaryColliderRoot();
+            foreach (KeyValuePair<BoundaryLineKey, List<int>> line in boundaryLines)
+            {
+                CreateBoundaryLineColliders(parent, line.Key, line.Value);
+            }
+        }
+
+        private static void AddBoundaryLineCell(Dictionary<BoundaryLineKey, List<int>> lines, BoundaryLineKey key, int value)
+        {
+            if (!lines.TryGetValue(key, out List<int> values))
+            {
+                values = new List<int>();
+                lines.Add(key, values);
+            }
+
+            values.Add(value);
+        }
+
+        private void CreateBoundaryLineColliders(Transform parent, BoundaryLineKey key, List<int> values)
+        {
+            if (values == null || values.Count == 0)
+            {
+                return;
+            }
+
+            values.Sort();
+            int start = values[0];
+            int previous = values[0];
+
+            for (int i = 1; i < values.Count; i++)
+            {
+                int value = values[i];
+                if (value <= previous + 1)
+                {
+                    previous = Mathf.Max(previous, value);
+                    continue;
+                }
+
+                CreateBoundaryCollider(parent, key, start, previous + 1);
+                start = value;
+                previous = value;
+            }
+
+            CreateBoundaryCollider(parent, key, start, previous + 1);
+        }
+
+        private void CreateBoundaryCollider(Transform parent, BoundaryLineKey key, int start, int end)
+        {
+            if (end <= start)
+            {
+                return;
+            }
+
+            float thickness = Mathf.Max(0.02f, wallBoundaryColliderThickness);
+            float outwardOffset = Mathf.Max(0f, wallBoundaryColliderOutwardOffsetCells);
+            GetBoundaryColliderEndpointExtension(key, start, end, outwardOffset, out float startExtension, out float endExtension);
+            Vector2 centerCells;
+            Vector2 sizeCells;
+
+            if (key.Horizontal)
+            {
+                float extendedStart = start - startExtension;
+                float extendedEnd = end + endExtension;
+                if (extendedEnd <= extendedStart)
+                {
+                    return;
+                }
+
+                centerCells = new Vector2((extendedStart + extendedEnd) * 0.5f, key.FixedLine + key.OutwardSign * (outwardOffset + thickness * 0.5f));
+                sizeCells = new Vector2(extendedEnd - extendedStart, thickness);
+            }
+            else
+            {
+                float extendedStart = start - startExtension;
+                float extendedEnd = end + endExtension;
+                if (extendedEnd <= extendedStart)
+                {
+                    return;
+                }
+
+                centerCells = new Vector2(key.FixedLine + key.OutwardSign * (outwardOffset + thickness * 0.5f), (extendedStart + extendedEnd) * 0.5f);
+                sizeCells = new Vector2(thickness, extendedEnd - extendedStart);
+            }
+
+            Vector3 worldCenter = GetCellSpaceWorldPosition(centerCells);
+            Vector2 worldSize = GetCellSpaceWorldSize(sizeCells);
+
+            GameObject colliderObject = new GameObject(key.Horizontal ? "Wall Boundary Horizontal" : "Wall Boundary Vertical");
+            colliderObject.layer = GetDoorCollisionLayer();
+            colliderObject.transform.SetParent(parent, true);
+            colliderObject.transform.position = worldCenter;
+
+            BoxCollider2D collider = colliderObject.AddComponent<BoxCollider2D>();
+            collider.isTrigger = false;
+            collider.size = worldSize;
+            wallBoundaryColliders.Add(collider);
+        }
+
+        private void GetBoundaryColliderEndpointExtension(
+            BoundaryLineKey key,
+            int start,
+            int end,
+            float outwardOffset,
+            out float startExtension,
+            out float endExtension)
+        {
+            startExtension = 0f;
+            endExtension = 0f;
+            if (outwardOffset <= 0f)
+            {
+                return;
+            }
+
+            if (key.Horizontal)
+            {
+                startExtension = GetBoundaryCornerEndpointAdjustment(start, key.FixedLine, outwardOffset);
+                endExtension = GetBoundaryCornerEndpointAdjustment(end, key.FixedLine, outwardOffset);
+                return;
+            }
+
+            startExtension = GetBoundaryCornerEndpointAdjustment(key.FixedLine, start, outwardOffset);
+            endExtension = GetBoundaryCornerEndpointAdjustment(key.FixedLine, end, outwardOffset);
+        }
+
+        private float GetBoundaryCornerEndpointAdjustment(int vertexX, int vertexY, float outwardOffset)
+        {
+            int floorCount = 0;
+            if (HasFloor(vertexX - 1, vertexY - 1))
+            {
+                floorCount++;
+            }
+
+            if (HasFloor(vertexX, vertexY - 1))
+            {
+                floorCount++;
+            }
+
+            if (HasFloor(vertexX - 1, vertexY))
+            {
+                floorCount++;
+            }
+
+            if (HasFloor(vertexX, vertexY))
+            {
+                floorCount++;
+            }
+
+            if (floorCount == 1)
+            {
+                return outwardOffset;
+            }
+
+            if (floorCount == 3)
+            {
+                return -outwardOffset;
+            }
+
+            return 0f;
+        }
+
+        private Vector3 GetCellSpaceWorldPosition(Vector2 cellPosition)
+        {
+            Vector3 origin = floorTilemap.CellToWorld(Vector3Int.zero);
+            Vector3 right = floorTilemap.CellToWorld(Vector3Int.right) - origin;
+            Vector3 up = floorTilemap.CellToWorld(Vector3Int.up) - origin;
+            return origin + right * cellPosition.x + up * cellPosition.y;
+        }
+
+        private Vector2 GetCellSpaceWorldSize(Vector2 cellSize)
+        {
+            Vector3 origin = floorTilemap.CellToWorld(Vector3Int.zero);
+            float xSize = (floorTilemap.CellToWorld(Vector3Int.right) - origin).magnitude;
+            float ySize = (floorTilemap.CellToWorld(Vector3Int.up) - origin).magnitude;
+            return new Vector2(Mathf.Abs(cellSize.x) * xSize, Mathf.Abs(cellSize.y) * ySize);
+        }
+
+        private void ClearReentrantCornerSideProtrusions(Vector3Int cell, Vector2Int openA, Vector2Int openB)
+        {
+            if (wallCollisionTilemap == null)
             {
                 return;
             }
 
             int offset = Mathf.Max(0, wallCollisionOutwardOffset);
-            TrySetWallCollisionCell(cell, collisionTile);
             for (int step = 1; step <= offset; step++)
             {
-                TrySetWallCollisionCell(new Vector3Int(cell.x + outward.x * step, cell.y, cell.z), collisionTile);
-                TrySetWallCollisionCell(new Vector3Int(cell.x, cell.y + outward.y * step, cell.z), collisionTile);
-                TrySetWallCollisionCell(new Vector3Int(cell.x + outward.x * step, cell.y + outward.y * step, cell.z), collisionTile);
+                ClearWallCollisionCell(new Vector3Int(cell.x + openA.x * step, cell.y + openA.y * step, cell.z));
+                ClearWallCollisionCell(new Vector3Int(cell.x + openB.x * step, cell.y + openB.y * step, cell.z));
             }
+        }
+
+        private void ClearWallCollisionCell(Vector3Int cell)
+        {
+            if (wallCollisionTilemap == null || floorCells.Contains(cell) || IsDoorCell(cell))
+            {
+                return;
+            }
+
+            wallCollisionTilemap.SetTile(cell, null);
         }
 
         private void TrySetWallCollisionCell(Vector3Int cell, TileBase tile)
@@ -2198,6 +2695,92 @@ namespace NeonBreaker.Dungeon
             }
         }
 
+        private bool TryGetReentrantCornerOpenDirections(Vector3Int cell, out Vector2Int openA, out Vector2Int openB)
+        {
+            bool floorNorth = HasFloor(cell.x, cell.y + 1);
+            bool floorSouth = HasFloor(cell.x, cell.y - 1);
+            bool floorEast = HasFloor(cell.x + 1, cell.y);
+            bool floorWest = HasFloor(cell.x - 1, cell.y);
+
+            if (floorNorth && floorWest)
+            {
+                openA = Vector2Int.down;
+                openB = Vector2Int.right;
+                return true;
+            }
+
+            if (floorNorth && floorEast)
+            {
+                openA = Vector2Int.down;
+                openB = Vector2Int.left;
+                return true;
+            }
+
+            if (floorSouth && floorWest)
+            {
+                openA = Vector2Int.up;
+                openB = Vector2Int.right;
+                return true;
+            }
+
+            if (floorSouth && floorEast)
+            {
+                openA = Vector2Int.up;
+                openB = Vector2Int.left;
+                return true;
+            }
+
+            openA = Vector2Int.zero;
+            openB = Vector2Int.zero;
+            return false;
+        }
+
+        private bool TryGetConvexCornerOutwardDirection(Vector3Int cell, out Vector2Int outward)
+        {
+            bool floorNorth = HasFloor(cell.x, cell.y + 1);
+            bool floorSouth = HasFloor(cell.x, cell.y - 1);
+            bool floorEast = HasFloor(cell.x + 1, cell.y);
+            bool floorWest = HasFloor(cell.x - 1, cell.y);
+
+            if (floorNorth || floorSouth || floorEast || floorWest)
+            {
+                outward = Vector2Int.zero;
+                return false;
+            }
+
+            bool floorNorthEast = HasFloor(cell.x + 1, cell.y + 1);
+            bool floorNorthWest = HasFloor(cell.x - 1, cell.y + 1);
+            bool floorSouthEast = HasFloor(cell.x + 1, cell.y - 1);
+            bool floorSouthWest = HasFloor(cell.x - 1, cell.y - 1);
+
+            if (floorNorthEast)
+            {
+                outward = Vector2Int.down + Vector2Int.left;
+                return true;
+            }
+
+            if (floorNorthWest)
+            {
+                outward = Vector2Int.down + Vector2Int.right;
+                return true;
+            }
+
+            if (floorSouthEast)
+            {
+                outward = Vector2Int.up + Vector2Int.left;
+                return true;
+            }
+
+            if (floorSouthWest)
+            {
+                outward = Vector2Int.up + Vector2Int.right;
+                return true;
+            }
+
+            outward = Vector2Int.zero;
+            return false;
+        }
+
         private bool ShouldSuppressVisibleOutlineTile(Vector3Int cell, DungeonTileSet.OutlineDirection direction)
         {
             return suppressDoorwayOuterCornerTiles
@@ -2207,9 +2790,12 @@ namespace NeonBreaker.Dungeon
 
         private bool ShouldCreateWallCollision(DungeonTileSet.OutlineDirection direction)
         {
-            return sealCornerCollisionGaps && IsAnyCornerDirection(direction)
-                || collideOuterCornerTiles
-                || !IsLogicalOuterCornerDirection(direction);
+            if (IsAnyCornerDirection(direction))
+            {
+                return sealCornerCollisionGaps || collideOuterCornerTiles;
+            }
+
+            return true;
         }
 
         private static bool IsAnyCornerDirection(DungeonTileSet.OutlineDirection direction)
@@ -2500,16 +3086,18 @@ namespace NeonBreaker.Dungeon
                     continue;
                 }
 
+                UpdateDoorWidthRangeFromCurrentFloor(i);
                 Tilemap doorTilemap = CreateTilemap(parent, $"Door Tilemap {i}", 3);
                 doorTilemap.gameObject.layer = GetDoorCollisionLayer();
                 TilemapCollider2D doorCollider = doorTilemap.gameObject.AddComponent<TilemapCollider2D>();
                 doorCollider.enabled = useDoorTilemapCollider;
                 BoxCollider2D doorBlocker = CreateDoorBlocker(parent, i, cells);
                 Matrix4x4 doorTransform = GetDoorTileTransform(i);
+                List<Vector3Int> visualCells = GetDoorVisualCells(i, cells);
 
-                for (int cellIndex = 0; cellIndex < cells.Count; cellIndex++)
+                for (int cellIndex = 0; cellIndex < visualCells.Count; cellIndex++)
                 {
-                    Vector3Int cell = cells[cellIndex];
+                    Vector3Int cell = visualCells[cellIndex];
                     doorTilemap.SetTile(cell, tileSet.GetRandomDoorTile());
                     doorTilemap.SetTransformMatrix(cell, doorTransform);
                 }
@@ -2518,6 +3106,68 @@ namespace NeonBreaker.Dungeon
                 doorColliders.Add(doorCollider);
                 doorBlockers.Add(doorBlocker);
             }
+        }
+
+        private void UpdateDoorWidthRangeFromCurrentFloor(int doorIndex)
+        {
+            if (doorIndex < 0
+                || doorIndex >= doorCenters.Count
+                || doorIndex >= doorDirections.Count
+                || doorIndex >= doorWidthOffsetRanges.Count)
+            {
+                return;
+            }
+
+            Vector2Int center = doorCenters[doorIndex];
+            Vector2Int direction = doorDirections[doorIndex];
+            if (TryGetDoorwayPassageWidthOffsets(center, direction, out int minOffset, out int maxOffset))
+            {
+                doorWidthOffsetRanges[doorIndex] = new Vector2Int(minOffset, maxOffset);
+            }
+        }
+
+        private List<Vector3Int> GetDoorVisualCells(int doorIndex, List<Vector3Int> fallbackCells)
+        {
+            if (doorIndex < 0
+                || doorIndex >= doorCenters.Count
+                || doorIndex >= doorDirections.Count
+                || doorIndex >= doorWidthOffsetRanges.Count)
+            {
+                return fallbackCells;
+            }
+
+            Vector2Int direction = doorDirections[doorIndex];
+            if (direction == Vector2Int.zero)
+            {
+                return fallbackCells;
+            }
+
+            Vector2Int center = doorCenters[doorIndex];
+            Vector2Int widthRange = doorWidthOffsetRanges[doorIndex];
+            int thickness = Mathf.Max(1, doorThickness);
+            int minOffset = widthRange.x;
+            int maxOffset = widthRange.y;
+            List<Vector3Int> visualCells = new List<Vector3Int>();
+
+            for (int widthOffset = minOffset; widthOffset <= maxOffset; widthOffset++)
+            {
+                for (int depth = 0; depth < thickness; depth++)
+                {
+                    Vector2Int cell = center + direction * depth;
+                    if (direction.x != 0)
+                    {
+                        cell.y += widthOffset;
+                    }
+                    else
+                    {
+                        cell.x += widthOffset;
+                    }
+
+                    visualCells.Add(new Vector3Int(cell.x, cell.y, 0));
+                }
+            }
+
+            return visualCells;
         }
 
         private Matrix4x4 GetDoorTileTransform(int doorIndex)
@@ -2768,6 +3418,20 @@ namespace NeonBreaker.Dungeon
             return roomTriggerRoot;
         }
 
+        private Transform GetWallBoundaryColliderRoot()
+        {
+            Transform gridRoot = GetGridRoot();
+            if (wallBoundaryColliderRoot != null && wallBoundaryColliderRoot.parent == gridRoot)
+            {
+                return wallBoundaryColliderRoot;
+            }
+
+            GameObject root = new GameObject("Generated Wall Boundary Colliders");
+            root.transform.SetParent(gridRoot, false);
+            wallBoundaryColliderRoot = root.transform;
+            return wallBoundaryColliderRoot;
+        }
+
         private Transform GetGridRoot()
         {
             if (floorTilemap != null && floorTilemap.transform.parent != null)
@@ -2801,6 +3465,17 @@ namespace NeonBreaker.Dungeon
             {
                 DestroyGeneratedObject(doorRoot.gameObject);
                 doorRoot = null;
+            }
+        }
+
+        private void ClearGeneratedWallBoundaryColliders()
+        {
+            wallBoundaryColliders.Clear();
+
+            if (wallBoundaryColliderRoot != null)
+            {
+                DestroyGeneratedObject(wallBoundaryColliderRoot.gameObject);
+                wallBoundaryColliderRoot = null;
             }
         }
 

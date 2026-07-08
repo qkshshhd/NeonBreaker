@@ -1,5 +1,6 @@
 using System.Collections;
 using NeonBreaker.Combat;
+using NeonBreaker.Environment;
 using NeonBreaker.Pooling;
 using UnityEngine;
 
@@ -23,6 +24,8 @@ namespace NeonBreaker.Enemies
         [SerializeField] private PoolKey hitVfxPoolKey;
         [SerializeField] private GameObject hitVfx;
         [SerializeField] private bool playHitVfxOnDamage = true;
+        [SerializeField] private bool addDefaultHitShardEmitter = true;
+        [SerializeField] private AdditionalHitVfxEntry[] additionalHitVfx;
         [SerializeField] private PoolKey basicAttackSlashVfxPoolKey;
         [SerializeField] private GameObject basicAttackSlashVfx;
         [SerializeField] private PoolKey criticalBasicAttackSlashVfxPoolKey;
@@ -61,6 +64,32 @@ namespace NeonBreaker.Enemies
         private Quaternion visualBaseLocalRotation = Quaternion.identity;
         private Vector3 visualBaseLocalScale = Vector3.one;
 
+        [System.Serializable]
+        private struct AdditionalHitVfxEntry
+        {
+            [SerializeField] private PoolKey poolKey;
+            [SerializeField] private GameObject prefab;
+            [SerializeField] private bool spawnAtImpactPoint;
+            [SerializeField] private bool alignToImpactDirection;
+            [SerializeField] private bool randomizeRotation;
+            [SerializeField, Range(0f, 180f)] private float randomRotationRange;
+            [SerializeField] private bool filterBySourceType;
+            [SerializeField] private DamageSourceType sourceType;
+
+            public PoolKey PoolKey => poolKey;
+            public GameObject Prefab => prefab;
+            public bool SpawnAtImpactPoint => spawnAtImpactPoint;
+            public bool AlignToImpactDirection => alignToImpactDirection;
+            public bool RandomizeRotation => randomizeRotation;
+            public float RandomRotationRange => randomRotationRange;
+            public bool IsConfigured => poolKey != null || prefab != null;
+
+            public bool CanPlay(DamageInfo damage)
+            {
+                return IsConfigured && (!filterBySourceType || damage.SourceType == sourceType);
+            }
+        }
+
         private void Awake()
         {
             if (enemy == null)
@@ -81,6 +110,7 @@ namespace NeonBreaker.Enemies
             spriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
             ResolveVisualRoot();
             CacheVisualBaseTransform();
+            EnsureDefaultHitShardEmitter();
         }
 
         private void OnEnable()
@@ -130,7 +160,30 @@ namespace NeonBreaker.Enemies
             Play(clip, center);
             Spawn(hitImpactVfx, hitImpactPoolKey, position, damageRotation, true);
             Spawn(slashVfx, slashPoolKey, center, damageRotation, true);
+            SpawnAdditionalHitVfx(damage, center, position, rotation);
             DrawImpactDebug(center, position);
+        }
+
+        private void SpawnAdditionalHitVfx(DamageInfo damage, Vector3 center, Vector3 impactPosition, Quaternion impactRotation)
+        {
+            if (additionalHitVfx == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < additionalHitVfx.Length; i++)
+            {
+                AdditionalHitVfxEntry entry = additionalHitVfx[i];
+                if (!entry.CanPlay(damage))
+                {
+                    continue;
+                }
+
+                Vector3 spawnPosition = entry.SpawnAtImpactPoint ? impactPosition : center;
+                Quaternion spawnRotation = entry.AlignToImpactDirection ? impactRotation : Quaternion.identity;
+                spawnRotation = GetRandomizedRotation(spawnRotation, entry.RandomizeRotation, entry.RandomRotationRange);
+                Spawn(entry.Prefab, entry.PoolKey, spawnPosition, spawnRotation, entry.AlignToImpactDirection);
+            }
         }
 
         private GameObject ResolveBasicAttackSlashVfx(DamageInfo damage)
@@ -558,6 +611,16 @@ namespace NeonBreaker.Enemies
                     particleSystem.Play(true);
                 }
             }
+        }
+
+        private void EnsureDefaultHitShardEmitter()
+        {
+            if (!addDefaultHitShardEmitter || GetComponent<EnemyHitShardEmitter2D>() != null)
+            {
+                return;
+            }
+
+            gameObject.AddComponent<EnemyHitShardEmitter2D>();
         }
     }
 }

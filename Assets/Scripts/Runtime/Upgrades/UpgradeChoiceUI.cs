@@ -120,7 +120,7 @@ namespace NeonBreaker.Upgrades
 
                 UpgradeDefinition choice = i < choices.Count ? choices[i] : null;
                 string levelLabel = BuildLevelText(choice);
-                cards[i].Bind(choice, levelLabel);
+                cards[i].Bind(choice, levelLabel, upgradeManager != null && upgradeManager.CurrentRewardIsElite);
             }
 
             SetVisible(true);
@@ -284,6 +284,32 @@ namespace NeonBreaker.Upgrades
 
             Image cardImage = cardObject.AddComponent<Image>();
             cardImage.color = new Color(0.08f, 0.09f, 0.12f, 0.96f);
+            Outline cardOutline = cardObject.AddComponent<Outline>();
+            cardOutline.effectColor = new Color(0.24f, 0.95f, 1f, 0.82f);
+            cardOutline.effectDistance = new Vector2(3f, -3f);
+
+            GameObject borderObject = CreateUiObject("Border", cardObject.transform);
+            RectTransform borderRect = borderObject.GetComponent<RectTransform>();
+            StretchToParent(borderRect);
+            Image borderImage = borderObject.AddComponent<Image>();
+            borderImage.color = Color.clear;
+            borderImage.enabled = false;
+            borderImage.raycastTarget = false;
+            LayoutElement borderLayout = borderObject.AddComponent<LayoutElement>();
+            borderLayout.ignoreLayout = true;
+
+            GameObject accentObject = CreateUiObject("Accent", cardObject.transform);
+            RectTransform accentRect = accentObject.GetComponent<RectTransform>();
+            accentRect.anchorMin = new Vector2(0f, 1f);
+            accentRect.anchorMax = new Vector2(1f, 1f);
+            accentRect.pivot = new Vector2(0.5f, 1f);
+            accentRect.anchoredPosition = Vector2.zero;
+            accentRect.sizeDelta = new Vector2(0f, 6f);
+            Image accentImage = accentObject.AddComponent<Image>();
+            accentImage.color = new Color(0.24f, 0.95f, 1f, 1f);
+            accentImage.raycastTarget = false;
+            LayoutElement accentLayout = accentObject.AddComponent<LayoutElement>();
+            accentLayout.ignoreLayout = true;
 
             Button button = cardObject.AddComponent<Button>();
             ColorBlock colors = button.colors;
@@ -301,9 +327,50 @@ namespace NeonBreaker.Upgrades
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
 
-            TextMeshProUGUI indexText = CreateText(cardObject.transform, "Index", $"{index + 1}", 24, FontStyles.Bold, TextAlignmentOptions.Left);
-            indexText.color = new Color(0.4f, 0.95f, 1f, 1f);
-            AddLayout(indexText.gameObject, 312f, 34f);
+            GameObject topRow = CreateUiObject("Top Row", cardObject.transform);
+            AddLayout(topRow, 312f, 58f);
+            HorizontalLayoutGroup topRowLayout = topRow.AddComponent<HorizontalLayoutGroup>();
+            topRowLayout.spacing = 12f;
+            topRowLayout.childAlignment = TextAnchor.MiddleLeft;
+            topRowLayout.childControlWidth = false;
+            topRowLayout.childControlHeight = false;
+            topRowLayout.childForceExpandWidth = false;
+            topRowLayout.childForceExpandHeight = false;
+
+            GameObject iconRoot = CreateUiObject("Icon Root", topRow.transform);
+            AddLayout(iconRoot, 52f, 52f);
+            Image iconBackground = iconRoot.AddComponent<Image>();
+            iconBackground.color = new Color(0.24f, 0.95f, 1f, 0.2f);
+            iconBackground.raycastTarget = false;
+
+            GameObject iconObject = CreateUiObject("Icon", iconRoot.transform);
+            RectTransform iconRect = iconObject.GetComponent<RectTransform>();
+            iconRect.anchorMin = new Vector2(0.5f, 0.5f);
+            iconRect.anchorMax = new Vector2(0.5f, 0.5f);
+            iconRect.pivot = new Vector2(0.5f, 0.5f);
+            iconRect.anchoredPosition = Vector2.zero;
+            iconRect.sizeDelta = new Vector2(36f, 36f);
+            Image iconImage = iconObject.AddComponent<Image>();
+            iconImage.raycastTarget = false;
+            iconImage.preserveAspect = true;
+
+            GameObject labelColumn = CreateUiObject("Label Column", topRow.transform);
+            AddLayout(labelColumn, 248f, 52f);
+            VerticalLayoutGroup labelLayout = labelColumn.AddComponent<VerticalLayoutGroup>();
+            labelLayout.spacing = 2f;
+            labelLayout.childAlignment = TextAnchor.MiddleLeft;
+            labelLayout.childControlWidth = true;
+            labelLayout.childControlHeight = false;
+            labelLayout.childForceExpandWidth = true;
+            labelLayout.childForceExpandHeight = false;
+
+            TextMeshProUGUI categoryText = CreateText(labelColumn.transform, "Category", "공격", 18, FontStyles.Bold, TextAlignmentOptions.Left);
+            categoryText.color = new Color(0.4f, 0.95f, 1f, 1f);
+            AddLayout(categoryText.gameObject, 248f, 22f);
+
+            TextMeshProUGUI indexText = CreateText(labelColumn.transform, "Index", $"CHOICE {index + 1}", 16, FontStyles.Bold, TextAlignmentOptions.Left);
+            indexText.color = new Color(0.58f, 0.68f, 0.76f, 1f);
+            AddLayout(indexText.gameObject, 248f, 20f);
 
             TextMeshProUGUI nameText = CreateText(cardObject.transform, "Name", "Upgrade", 28, FontStyles.Bold, TextAlignmentOptions.TopLeft);
             nameText.color = Color.white;
@@ -318,7 +385,17 @@ namespace NeonBreaker.Upgrades
             AddLayout(descriptionText.gameObject, 312f, 156f);
 
             UpgradeChoiceCardUI card = cardObject.AddComponent<UpgradeChoiceCardUI>();
-            card.ConfigureBindings(button, nameText, levelText, descriptionText);
+            card.ConfigureBindings(
+                button,
+                nameText,
+                levelText,
+                descriptionText,
+                iconImage,
+                categoryText,
+                borderImage,
+                accentImage,
+                iconBackground,
+                cardOutline);
             return card;
         }
 

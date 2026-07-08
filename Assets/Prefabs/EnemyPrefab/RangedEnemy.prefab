@@ -80,7 +80,7 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 10
   m_MaskInteraction: 0
   m_Sprite: {fileID: -3179485974644601037, guid: 9455abfde795d474891363a3d3a155b9, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -198,6 +198,7 @@ GameObject:
   - component: {fileID: 269470217514739849}
   - component: {fileID: 4999985815176407913}
   - component: {fileID: -1960065920228042300}
+  - component: {fileID: 1667753601492799412}
   m_Layer: 7
   m_Name: RangedEnemy
   m_TagString: Untagged
@@ -215,7 +216,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 4.05, y: -0.41636, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 1.2, y: 1.2, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 4590898399798507494}
@@ -269,7 +270,7 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 10
   m_MaskInteraction: 0
   m_Sprite: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -455,6 +456,16 @@ MonoBehaviour:
   hitVfxPoolKey: {fileID: 11400000, guid: b584440959b880b48b4129ba6b5e0291, type: 2}
   hitVfx: {fileID: 3756106986630792206, guid: 02b245c4c319b224f9d96d84e1d6fb55, type: 3}
   playHitVfxOnDamage: 0
+  addDefaultHitShardEmitter: 1
+  additionalHitVfx:
+  - poolKey: {fileID: 11400000, guid: fb94eed9e3c6eff4fa6f2667d491b067, type: 2}
+    prefab: {fileID: 5753959987187032679, guid: 53d23a92c14f08344809bddc4d409bbe, type: 3}
+    spawnAtImpactPoint: 0
+    alignToImpactDirection: 0
+    randomizeRotation: 0
+    randomRotationRange: 180
+    filterBySourceType: 0
+    sourceType: 0
   basicAttackSlashVfxPoolKey: {fileID: 11400000, guid: 3494823af3cc8da40a39ad7c607f4ac5, type: 2}
   basicAttackSlashVfx: {fileID: 8426499583472404015, guid: e46f3de22c435a445bb93deba5b77fdc, type: 3}
   criticalBasicAttackSlashVfxPoolKey: {fileID: 0}
@@ -467,7 +478,7 @@ MonoBehaviour:
   rotateImpactVfxToDamageDirection: 1
   invertImpactVfxDirection: 0
   randomizeDamageVfxRotation: 1
-  damageVfxRandomRotationRange: 180
+  damageVfxRandomRotationRange: 0
   randomizeDeathVfxRotation: 0
   deathVfxRandomRotationRange: 180
   rotateParticleShapeToImpactDirection: 1
@@ -479,8 +490,8 @@ MonoBehaviour:
   visualRoot: {fileID: 0}
   hitSnapDistance: 0.07
   hitSnapDuration: 0.035
-  hitReturnDuration: 0.08
-  hitAngularJolt: 5
+  hitReturnDuration: 0.15
+  hitAngularJolt: 10.13
   hitScaleJolt: {x: 1.08, y: 0.92, z: 1}
 --- !u!114 &4999985815176407913
 MonoBehaviour:
@@ -525,6 +536,68 @@ MonoBehaviour:
   criticalFlashColor: {r: 1, g: 0.85, b: 0.25, a: 1}
   flashDuration: 0.08
   criticalFlashDuration: 0.12
+--- !u!114 &1667753601492799412
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6053256270774861727}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dfbb9de039c867147a4c237f6bb4211e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NeonBreaker.Environment.EnemyHitShardEmitter2D
+  health: {fileID: 0}
+  shardRoot: {fileID: 0}
+  useSharedWorldShardRoot: 1
+  keepShardsAfterEmitterDestroyed: 1
+  shardSprites:
+  - {fileID: -1918182868020514552, guid: 28cd0276912dd584ebed4cbbed641752, type: 3}
+  shardMaterial: {fileID: 2100000, guid: f166f67a70e592143ba19e505866d60f, type: 2}
+  shardColors:
+  - {r: 0.1, g: 0.95, b: 1, a: 1}
+  - {r: 1, g: 0.15, b: 0.55, a: 1}
+  - {r: 0.95, g: 0.95, b: 1, a: 1}
+  sortingLayer: Default
+  sortingOrder: 9
+  sizeRange: {x: 0.1, y: 0.2}
+  useLightStreak: 1
+  streakMaterial: {fileID: 0}
+  streakLength: 0.9
+  streakStartWidth: 0.13
+  streakEndWidth: 0.025
+  streakAlpha: 0.9
+  minShardCount: 2
+  maxShardCount: 3
+  criticalCountMultiplier: 1
+  fatalHitCountMultiplier: 1
+  emitOnlyForPlayerDamage: 1
+  ignoreSkillDamage: 0
+  emitAwayFromDamageSource: 1
+  invertEmitDirection: 0
+  spreadAngle: 154.5
+  speedRange: {x: 2.2, y: 5.2}
+  settleTimeRange: {x: 0.22, y: 0.42}
+  lifetimeRange: {x: 3, y: 6}
+  minimumTravelDistance: 1.25
+  travelDistanceMultiplierRange: {x: 0.65, y: 1.45}
+  easePowerRange: {x: 2.4, y: 5.2}
+  spinSpeedRange: {x: 520, y: 1320}
+  bounceBackAmount: 0.08
+  spawnRadius: 0.18
+  forwardSpawnOffset: 0.12
+  spawnFromEnemyBackSide: 1
+  backSideBoundsOffset: 0.95
+  minimumBackSideOffset: 0.35
+  backSideTangentJitter: 0.18
+  collideWithEnvironment: 1
+  environmentCollisionLayers:
+    serializedVersion: 2
+    m_Bits: 2035
+  collisionSkin: 0.035
+  collisionBounceFactor: 0.22
+  maxCollisionBounceDistance: 0.35
 --- !u!1 &8046464236048875676
 GameObject:
   m_ObjectHideFlags: 0

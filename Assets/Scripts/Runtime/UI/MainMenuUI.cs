@@ -35,6 +35,15 @@ namespace NeonBreaker.UI
         [SerializeField] private bool selectStartButtonOnAwake;
         [SerializeField] private bool useMouseFallbackInput = true;
 
+        [Header("Presentation")]
+        [SerializeField] private MainMenuStartTransition startTransition;
+        [SerializeField] private MainMenuAmbientMotion ambientMotion;
+        [SerializeField] private MainMenuParticleLayer particleLayer;
+        [SerializeField] private MainMenuLogoAnimator logoAnimator;
+        [SerializeField] private bool addPresentationHelpersIfMissing = true;
+
+        private bool startRequested;
+
         private void Awake()
         {
             Time.timeScale = 1f;
@@ -54,6 +63,7 @@ namespace NeonBreaker.UI
                 BuildFallbackUi();
             }
 
+            EnsurePresentationHelpers();
             BindButtons();
             SetText(titleText, title);
             SetText(subtitleText, subtitle);
@@ -96,8 +106,31 @@ namespace NeonBreaker.UI
 
         public void StartGame()
         {
+            if (startRequested)
+            {
+                return;
+            }
+
+            startRequested = true;
             Time.timeScale = 1f;
 
+            if (root != null)
+            {
+                root.interactable = false;
+                root.blocksRaycasts = false;
+            }
+
+            if (startTransition != null && startTransition.isActiveAndEnabled)
+            {
+                startTransition.Play(LoadGameplayScene);
+                return;
+            }
+
+            LoadGameplayScene();
+        }
+
+        private void LoadGameplayScene()
+        {
             if (TryLoadScene(gameplaySceneName))
             {
                 return;
@@ -131,6 +164,13 @@ namespace NeonBreaker.UI
             Debug.LogError(
                 $"[MainMenuUI] Gameplay scene could not be loaded. Tried '{gameplaySceneName}', '{fallbackGameplaySceneName}', and build index {fallbackGameplayBuildIndex}. Add GamePlay to Build Settings or set Gameplay Scene Name.",
                 this);
+
+            startRequested = false;
+            if (root != null)
+            {
+                root.interactable = true;
+                root.blocksRaycasts = true;
+            }
         }
 
         private static bool TryLoadScene(string sceneName)
@@ -262,6 +302,54 @@ namespace NeonBreaker.UI
                 quitButton.onClick.AddListener(QuitGame);
                 SetButtonLabel(quitButton, quitLabel);
                 EnsureHoverAnimation(quitButton);
+            }
+        }
+
+        private void EnsurePresentationHelpers()
+        {
+            if (startTransition == null)
+            {
+                startTransition = GetComponentInChildren<MainMenuStartTransition>(true);
+            }
+
+            if (ambientMotion == null)
+            {
+                ambientMotion = GetComponentInChildren<MainMenuAmbientMotion>(true);
+            }
+
+            if (particleLayer == null)
+            {
+                particleLayer = GetComponentInChildren<MainMenuParticleLayer>(true);
+            }
+
+            if (logoAnimator == null)
+            {
+                logoAnimator = titleText != null ? titleText.GetComponent<MainMenuLogoAnimator>() : GetComponentInChildren<MainMenuLogoAnimator>(true);
+            }
+
+            if (!addPresentationHelpersIfMissing)
+            {
+                return;
+            }
+
+            if (startTransition == null)
+            {
+                startTransition = gameObject.AddComponent<MainMenuStartTransition>();
+            }
+
+            if (ambientMotion == null)
+            {
+                ambientMotion = gameObject.AddComponent<MainMenuAmbientMotion>();
+            }
+
+            if (particleLayer == null)
+            {
+                particleLayer = gameObject.AddComponent<MainMenuParticleLayer>();
+            }
+
+            if (logoAnimator == null && titleText != null)
+            {
+                logoAnimator = titleText.gameObject.AddComponent<MainMenuLogoAnimator>();
             }
         }
 

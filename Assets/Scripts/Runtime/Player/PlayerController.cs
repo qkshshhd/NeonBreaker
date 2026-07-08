@@ -11,6 +11,7 @@ namespace NeonBreaker.Player
     [RequireComponent(typeof(MeleeAttack2D))]
     [RequireComponent(typeof(PlayerStats))]
     [RequireComponent(typeof(PlayerSkillController))]
+    [RequireComponent(typeof(PlayerRecoilCore))]
     [RequireComponent(typeof(Health))]
     public sealed class PlayerController : MonoBehaviour
     {
@@ -27,6 +28,7 @@ namespace NeonBreaker.Player
         private MeleeAttack2D attack;
         private PlayerStats stats;
         private PlayerSkillController skillController;
+        private PlayerRecoilCore recoilCore;
         private Health health;
 
         private PlayerIdleState idleState;
@@ -46,6 +48,7 @@ namespace NeonBreaker.Player
         public MeleeAttack2D Attack => attack;
         public PlayerStats Stats => stats;
         public PlayerSkillController SkillController => skillController;
+        public PlayerRecoilCore RecoilCore => recoilCore;
         public Health Health => health;
         public bool IsSkillCasting => skillController != null && skillController.IsCasting;
 
@@ -57,6 +60,12 @@ namespace NeonBreaker.Player
             attack = GetComponent<MeleeAttack2D>();
             stats = GetComponent<PlayerStats>();
             skillController = GetComponent<PlayerSkillController>();
+            recoilCore = GetComponent<PlayerRecoilCore>();
+            if (recoilCore == null)
+            {
+                recoilCore = gameObject.AddComponent<PlayerRecoilCore>();
+            }
+
             health = GetComponent<Health>();
 
             EnsureDefaultDamageFeedback();

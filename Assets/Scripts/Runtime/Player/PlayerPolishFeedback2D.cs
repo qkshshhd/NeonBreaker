@@ -40,6 +40,8 @@ namespace NeonBreaker.Player
         [SerializeField] private GameObject skillStartVfx;
         [SerializeField] private PoolKey skillStartVfxPoolKey;
         [SerializeField] private GameObject playerHitVfx;
+        [SerializeField] private PoolKey playerHitVfxPoolKey;
+        [SerializeField] private AdditionalHitVfxEntry[] additionalPlayerHitVfx;
         [SerializeField] private GameObject playerDeathVfx;
         [SerializeField, Min(0.01f)] private float fallbackVfxLifetime = 1.2f;
 
@@ -100,6 +102,32 @@ namespace NeonBreaker.Player
         private SpriteRenderer[] spriteRenderers;
 
         private const int CurrentAttackSwingScaleSettingsVersion = 2;
+
+        [System.Serializable]
+        private struct AdditionalHitVfxEntry
+        {
+            [SerializeField] private PoolKey poolKey;
+            [SerializeField] private GameObject prefab;
+            [SerializeField] private bool spawnAtImpactPoint;
+            [SerializeField] private bool alignToImpactDirection;
+            [SerializeField] private bool randomizeRotation;
+            [SerializeField, Range(0f, 180f)] private float randomRotationRange;
+            [SerializeField] private bool filterBySourceType;
+            [SerializeField] private DamageSourceType sourceType;
+
+            public PoolKey PoolKey => poolKey;
+            public GameObject Prefab => prefab;
+            public bool SpawnAtImpactPoint => spawnAtImpactPoint;
+            public bool AlignToImpactDirection => alignToImpactDirection;
+            public bool RandomizeRotation => randomizeRotation;
+            public float RandomRotationRange => randomRotationRange;
+            public bool IsConfigured => poolKey != null || prefab != null;
+
+            public bool CanPlay(DamageInfo damage)
+            {
+                return IsConfigured && (!filterBySourceType || damage.SourceType == sourceType);
+            }
+        }
 
         [System.Serializable]
         private struct AttackSwingVfxEntry
@@ -275,8 +303,31 @@ namespace NeonBreaker.Player
             GetImpactVfxTransform(damage, center, out Vector3 position, out Quaternion rotation);
 
             Play(playerHitClip);
-            Spawn(playerHitVfx, position, rotation, true);
+            Spawn(playerHitVfx, position, rotation, true, playerHitVfxPoolKey);
+            SpawnAdditionalPlayerHitVfx(damage, center, position, rotation);
             DrawImpactDebug(center, position);
+        }
+
+        private void SpawnAdditionalPlayerHitVfx(DamageInfo damage, Vector3 center, Vector3 impactPosition, Quaternion impactRotation)
+        {
+            if (additionalPlayerHitVfx == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < additionalPlayerHitVfx.Length; i++)
+            {
+                AdditionalHitVfxEntry entry = additionalPlayerHitVfx[i];
+                if (!entry.CanPlay(damage))
+                {
+                    continue;
+                }
+
+                Vector3 spawnPosition = entry.SpawnAtImpactPoint ? impactPosition : center;
+                Quaternion spawnRotation = entry.AlignToImpactDirection ? impactRotation : Quaternion.identity;
+                spawnRotation = GetRandomizedRotation(spawnRotation, entry.RandomizeRotation, entry.RandomRotationRange);
+                Spawn(entry.Prefab, spawnPosition, spawnRotation, entry.AlignToImpactDirection, entry.PoolKey);
+            }
         }
 
         private void HandlePlayerDied()
@@ -839,6 +890,17 @@ namespace NeonBreaker.Player
 
             PoolableGameObject poolable = ObjectPoolManager.Instance.Spawn(poolKey, position, rotation);
             return poolable != null ? poolable.gameObject : null;
+        }
+
+        private Quaternion GetRandomizedRotation(Quaternion baseRotation, bool randomize, float randomRange)
+        {
+            if (!randomize || randomRange <= 0f)
+            {
+                return baseRotation;
+            }
+
+            float randomOffset = Random.Range(-randomRange, randomRange);
+            return baseRotation * Quaternion.Euler(0f, 0f, randomOffset);
         }
 
         private void ApplyParticleShapeDirection(GameObject instance, float impactAngle)

@@ -15,8 +15,7 @@ MonoBehaviour:
   minRoomCount: 6
   maxRoomCount: 8
   firstSpecialRoomIndex: 2
-  startRooms:
-  - {fileID: 11400000, guid: 613581b4082604048bf8b06fa65969f1, type: 2}
+  startRooms: []
   combatRooms:
   - {fileID: 11400000, guid: 930ff9fa32390ef44ac2277428809c0c, type: 2}
   - {fileID: 11400000, guid: 3082fc74f1e7d3e4f95eea66b0fa6821, type: 2}
@@ -31,7 +30,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 84a3d42c65a88ec45b3593972f6ed199, type: 2}
   bossRooms:
   - {fileID: 11400000, guid: e523aec64110e1c4cb1fa47e797e58bb, type: 2}
-  eliteChance: 0.18
+  eliteChance: 1
   rewardChance: 0.18
   restChance: 0.12
   preventConsecutiveSpecialRooms: 1

@@ -28,6 +28,7 @@ namespace NeonBreaker.Upgrades
         private UpgradeDefinition[] defaultEliteUpgrades;
         private bool hasActiveChoices;
         private bool choicesVisible;
+        private bool currentRewardIsElite;
         private float previousTimeScale = 1f;
         private bool pausedByReward;
 
@@ -41,6 +42,7 @@ namespace NeonBreaker.Upgrades
         public IReadOnlyList<UpgradeRecord> AcquiredUpgrades => acquiredUpgrades;
         public bool HasActiveChoices => hasActiveChoices;
         public bool ChoicesVisible => choicesVisible;
+        public bool CurrentRewardIsElite => currentRewardIsElite;
 
         private void Awake()
         {
@@ -109,6 +111,7 @@ namespace NeonBreaker.Upgrades
 
             hasActiveChoices = false;
             choicesVisible = false;
+            currentRewardIsElite = false;
             currentChoices.Clear();
             RestoreTimeScale();
             UpgradeSelected?.Invoke(selected);
@@ -165,6 +168,7 @@ namespace NeonBreaker.Upgrades
 
             hasActiveChoices = true;
             choicesVisible = false;
+            currentRewardIsElite = room != null && room.RoomType == RoomType.Elite;
 
             if (offerChoicesImmediately)
             {

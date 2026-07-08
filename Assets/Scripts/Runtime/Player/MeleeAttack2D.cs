@@ -32,6 +32,7 @@ namespace NeonBreaker.Player
         private readonly HashSet<IDamageable> damagedTargets = new HashSet<IDamageable>();
         private Collider2D[] hitBuffer;
         private PlayerStats stats;
+        private PlayerRecoilCore recoilCore;
         private float cooldownTimer;
         private int comboIndex;
         private float comboResetTimer;
@@ -64,6 +65,7 @@ namespace NeonBreaker.Player
             maxHitBufferCapacity = Mathf.Max(maxHits, maxHitBufferCapacity);
             hitBuffer = new Collider2D[maxHits];
             stats = GetComponentInParent<PlayerStats>();
+            recoilCore = GetComponentInParent<PlayerRecoilCore>();
             ApplyDefinition();
         }
 
@@ -248,6 +250,8 @@ namespace NeonBreaker.Player
                 PlayFeedback(anyCritical);
             }
 
+            recoilCore?.AddBasicAttackRecoil(successfulHits, CurrentComboIndex);
+
             return successfulHits;
         }
 
@@ -353,7 +357,8 @@ namespace NeonBreaker.Player
         {
             float damageMultiplier = GetDamageMultiplier(comboStep, hitWindow);
             float baseDamage = damage * damageMultiplier;
-            return stats != null ? stats.RollAttackDamage(baseDamage, out isCritical) : RollFallbackDamage(baseDamage, out isCritical);
+            float rolledDamage = stats != null ? stats.RollAttackDamage(baseDamage, out isCritical) : RollFallbackDamage(baseDamage, out isCritical);
+            return recoilCore != null ? rolledDamage * recoilCore.GetBasicAttackDamageMultiplier() : rolledDamage;
         }
 
         private float RollFallbackDamage(float baseDamage, out bool isCritical)
@@ -526,7 +531,8 @@ namespace NeonBreaker.Player
             }
 
             float baseKnockback = knockbackForce * multiplier;
-            return stats != null ? stats.GetKnockback(baseKnockback) : baseKnockback;
+            float effectiveKnockback = stats != null ? stats.GetKnockback(baseKnockback) : baseKnockback;
+            return recoilCore != null ? effectiveKnockback * recoilCore.GetBasicAttackKnockbackMultiplier() : effectiveKnockback;
         }
 
         private void UpdateCurrentAttackWindow(MeleeComboDefinition.Step comboStep, MeleeComboDefinition.HitWindow hitWindow)

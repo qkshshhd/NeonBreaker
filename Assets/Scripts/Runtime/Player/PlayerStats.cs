@@ -10,6 +10,7 @@ namespace NeonBreaker.Player
     {
         [SerializeField] private Health health;
         [SerializeField] private PlayerSkillController skillController;
+        [SerializeField] private PlayerRecoilCore recoilCore;
 
         private float damageMultiplier = 1f;
         private float moveSpeedMultiplier = 1f;
@@ -59,6 +60,11 @@ namespace NeonBreaker.Player
             if (skillController == null)
             {
                 skillController = GetComponent<PlayerSkillController>();
+            }
+
+            if (recoilCore == null)
+            {
+                recoilCore = GetComponent<PlayerRecoilCore>();
             }
         }
 
@@ -115,12 +121,14 @@ namespace NeonBreaker.Player
 
         public float GetMoveSpeed(float baseMoveSpeed)
         {
-            return Mathf.Max(0f, baseMoveSpeed * moveSpeedMultiplier);
+            float recoilMultiplier = recoilCore != null ? recoilCore.GetMoveSpeedMultiplier() : 1f;
+            return Mathf.Max(0f, baseMoveSpeed * moveSpeedMultiplier * recoilMultiplier);
         }
 
         public float GetAttackCooldown(float baseCooldown)
         {
-            return Mathf.Max(0.02f, baseCooldown * attackCooldownMultiplier);
+            float recoilMultiplier = recoilCore != null ? recoilCore.GetAttackCooldownMultiplier() : 1f;
+            return Mathf.Max(0.02f, baseCooldown * attackCooldownMultiplier * recoilMultiplier);
         }
 
         public float GetAttackRange(float baseRange)
@@ -140,12 +148,14 @@ namespace NeonBreaker.Player
 
         public float GetDashCooldown(float baseCooldown)
         {
-            return Mathf.Max(0.02f, baseCooldown * dashCooldownMultiplier);
+            float recoilMultiplier = recoilCore != null ? recoilCore.GetDashCooldownMultiplier() : 1f;
+            return Mathf.Max(0.02f, baseCooldown * dashCooldownMultiplier * recoilMultiplier);
         }
 
         public float GetDashDistance(float baseDistance)
         {
-            return Mathf.Max(0.05f, baseDistance * dashDistanceMultiplier);
+            float recoilMultiplier = recoilCore != null ? recoilCore.GetDashDistanceMultiplier() : 1f;
+            return Mathf.Max(0.05f, baseDistance * dashDistanceMultiplier * recoilMultiplier);
         }
 
         public float GetDashShockwaveDamage(float baseDamage)

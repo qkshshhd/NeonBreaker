@@ -18,14 +18,14 @@ MonoBehaviour:
   unlockExitOnClear: 1
   clearDelay: 0.4
   waves:
-  - displayName: fd
+  - displayName: 
     startDelay: 0
     spawnGroups:
     - poolKey: {fileID: 11400000, guid: 2a7f27529e2097a44a94f5a2f2b7eee9, type: 2}
       count: 3
       spawnInterval: 0.2
       startDelay: 1
-  - displayName: fd
+  - displayName: 
     startDelay: 1
     spawnGroups:
     - poolKey: {fileID: 11400000, guid: 2a7f27529e2097a44a94f5a2f2b7eee9, type: 2}
@@ -36,7 +36,7 @@ MonoBehaviour:
       count: 3
       spawnInterval: 1
       startDelay: 1
-  - displayName: fd
+  - displayName: 
     startDelay: 1
     spawnGroups:
     - poolKey: {fileID: 11400000, guid: 2a7f27529e2097a44a94f5a2f2b7eee9, type: 2}
