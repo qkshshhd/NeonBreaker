@@ -34,6 +34,11 @@ namespace NeonBreaker.CameraSystem
         [SerializeField] private bool freeFollowWhileMovingBetweenRooms = true;
         [SerializeField] private bool freeFollowInRestRooms = true;
 
+        [Header("Target Visibility")]
+        [SerializeField] private bool keepTargetInsideView = true;
+        [SerializeField, Range(0f, 0.45f)] private float targetViewportSafePadding = 0.16f;
+        [SerializeField] private bool allowCameraOutsideRoomToKeepTargetVisible = true;
+
         [Header("Zoom")]
         [SerializeField] private bool fitZoomToRoom = true;
         [SerializeField, Min(1f)] private float minOrthographicSize = 5.5f;
@@ -265,7 +270,7 @@ namespace NeonBreaker.CameraSystem
             {
                 Vector3 centerPosition = activeRoomBounds.center;
                 centerPosition.z = followOffset.z;
-                return centerPosition;
+                return ApplyTargetVisibilityGuard(centerPosition);
             }
 
             Vector3 desired = target.position + followOffset;
@@ -273,17 +278,34 @@ namespace NeonBreaker.CameraSystem
 
             if (ShouldFreeFollowBetweenRooms())
             {
-                return desired;
+                return ApplyTargetVisibilityGuard(desired);
             }
 
             if (ignoresRoomBoundsForActiveRoom || !confineToCurrentRoom || !hasRoomBounds || targetCamera == null || !targetCamera.orthographic)
+            {
+                return ApplyTargetVisibilityGuard(desired);
+            }
+
+            desired = ClampCameraToActiveRoom(desired);
+            desired = ApplyTargetVisibilityGuard(desired);
+
+            if (allowCameraOutsideRoomToKeepTargetVisible && !IsTargetInsideActiveRoom())
+            {
+                return desired;
+            }
+
+            return ClampCameraToActiveRoom(desired);
+        }
+
+        private Vector3 ClampCameraToActiveRoom(Vector3 desired)
+        {
+            if (!hasRoomBounds || targetCamera == null || !targetCamera.orthographic)
             {
                 return desired;
             }
 
             float halfHeight = targetCamera.orthographicSize;
             float halfWidth = halfHeight * targetCamera.aspect;
-
             Vector3 min = activeRoomBounds.min + Vector3.one * roomPadding;
             Vector3 max = activeRoomBounds.max - Vector3.one * roomPadding;
             Vector3 center = activeRoomBounds.center;
@@ -292,6 +314,55 @@ namespace NeonBreaker.CameraSystem
             desired.x = GetClampedAxis(desired.x, min.x + halfWidth, max.x - halfWidth, center.x, followWhenRoomFitsView);
             desired.y = GetClampedAxis(desired.y, min.y + halfHeight, max.y - halfHeight, center.y, followWhenRoomFitsView);
             return desired;
+        }
+
+        private Vector3 ApplyTargetVisibilityGuard(Vector3 desired)
+        {
+            if (!keepTargetInsideView || target == null || targetCamera == null || !targetCamera.orthographic)
+            {
+                return desired;
+            }
+
+            float safePadding = Mathf.Clamp(targetViewportSafePadding, 0f, 0.45f);
+            float halfHeight = targetCamera.orthographicSize * (1f - safePadding);
+            float halfWidth = halfHeight * targetCamera.aspect;
+
+            Vector3 targetPosition = target.position + followOffset;
+            Vector3 delta = targetPosition - desired;
+            if (delta.x > halfWidth)
+            {
+                desired.x = targetPosition.x - halfWidth;
+            }
+            else if (delta.x < -halfWidth)
+            {
+                desired.x = targetPosition.x + halfWidth;
+            }
+
+            if (delta.y > halfHeight)
+            {
+                desired.y = targetPosition.y - halfHeight;
+            }
+            else if (delta.y < -halfHeight)
+            {
+                desired.y = targetPosition.y + halfHeight;
+            }
+
+            desired.z = followOffset.z;
+            return desired;
+        }
+
+        private bool IsTargetInsideActiveRoom()
+        {
+            if (!hasRoomBounds || target == null)
+            {
+                return true;
+            }
+
+            Vector3 position = target.position;
+            return position.x >= activeRoomBounds.min.x - roomPadding
+                && position.x <= activeRoomBounds.max.x + roomPadding
+                && position.y >= activeRoomBounds.min.y - roomPadding
+                && position.y <= activeRoomBounds.max.y + roomPadding;
         }
 
         private void UpdateZoom(float deltaTime)

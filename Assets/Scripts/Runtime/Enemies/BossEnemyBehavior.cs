@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using NeonBreaker.Combat;
 using NeonBreaker.Pooling;
 using NeonBreaker.Shared.StateMachine;
@@ -14,6 +15,9 @@ namespace NeonBreaker.Enemies
         private readonly StateMachine stateMachine = new StateMachine();
         private readonly Collider2D[] dashHitResults = new Collider2D[12];
         private readonly RaycastHit2D[] dashCastResults = new RaycastHit2D[12];
+        private readonly List<Vector2> telegraphDirections = new List<Vector2>(24);
+
+        private static Material defaultTelegraphLineMaterial;
 
         private float patternCooldownTimer;
         private int patternIndex;
@@ -28,6 +32,7 @@ namespace NeonBreaker.Enemies
         private bool damagedPlayerThisDash;
         private bool hitWallThisDash;
         private bool setupLogged;
+        private LineRenderer[] telegraphLines;
 
         private IdleState idleState;
         private RepositionState repositionState;
@@ -39,6 +44,7 @@ namespace NeonBreaker.Enemies
 
         private EnemyDefinition EnemyDefinition => Controller != null ? Controller.Definition : null;
         private bool IsPhaseTwo => Controller != null
+            && definition != null
             && Controller.Health != null
             && Controller.Health.MaxHealth > 0f
             && Controller.Health.CurrentHealth / Controller.Health.MaxHealth <= definition.PhaseTwoHealthRatio;
@@ -58,18 +64,20 @@ namespace NeonBreaker.Enemies
 
         public override void OnSpawned()
         {
-            patternCooldownTimer = 0f;
+            patternCooldownTimer = definition != null ? definition.InitialPatternDelay : 1.5f;
             patternIndex = 0;
             setupLogged = false;
             damagedPlayerThisDash = false;
             hitWallThisDash = false;
             ValidateSetup();
+            SetTelegraphLinesVisible(false);
             stateMachine.ChangeState(idleState);
         }
 
         public override void OnDespawned()
         {
             patternCooldownTimer = 0f;
+            SetTelegraphLinesVisible(false);
         }
 
         public override void Tick(float deltaTime)
@@ -93,6 +101,8 @@ namespace NeonBreaker.Enemies
             {
                 Controller.Body.linearVelocity = Vector2.zero;
             }
+
+            SetTelegraphLinesVisible(false);
         }
 
         public override void OnCollisionEnter2D(Collision2D collision)
@@ -380,6 +390,209 @@ namespace NeonBreaker.Enemies
             projectile.Launch(definition.ProjectileDefinition, direction, gameObject);
         }
 
+        private void UpdatePatternTelegraph()
+        {
+            if (definition == null || !definition.ShowPatternTelegraph || !Controller.HasTarget)
+            {
+                SetTelegraphLinesVisible(false);
+                return;
+            }
+
+            telegraphDirections.Clear();
+            CollectPatternTelegraphDirections(GetCurrentPatternType(), telegraphDirections);
+            int count = telegraphDirections.Count;
+            if (count <= 0)
+            {
+                SetTelegraphLinesVisible(false);
+                return;
+            }
+
+            EnsureTelegraphLineCount(count);
+            for (int i = 0; i < telegraphLines.Length; i++)
+            {
+                LineRenderer line = telegraphLines[i];
+                if (line == null)
+                {
+                    continue;
+                }
+
+                bool active = i < count;
+                line.enabled = active;
+                if (!active)
+                {
+                    continue;
+                }
+
+                ApplyTelegraphLineStyle(line);
+                Vector2 direction = telegraphDirections[i].sqrMagnitude > 0.0001f
+                    ? telegraphDirections[i].normalized
+                    : Vector2.right;
+                Vector3 start = GetFirePosition(direction);
+                line.SetPosition(0, start);
+                line.SetPosition(1, start + (Vector3)(direction * definition.TelegraphLineLength));
+            }
+        }
+
+        private void CollectPatternTelegraphDirections(BossPatternType patternType, List<Vector2> results)
+        {
+            if (definition == null)
+            {
+                return;
+            }
+
+            int aimedCount = definition.AimedProjectileCount + (IsPhaseTwo ? definition.PhaseTwoExtraAimedProjectiles : 0);
+            int radialCount = definition.RadialProjectileCount + (IsPhaseTwo ? definition.PhaseTwoExtraRadialProjectiles : 0);
+            float angleOffset = patternIndex * definition.RadialAngleOffsetPerPattern;
+
+            switch (patternType)
+            {
+                case BossPatternType.AimedSpread:
+                    AddAimedTelegraphDirections(results, aimedCount, definition.AimedSpreadAngle);
+                    break;
+                case BossPatternType.AimedBurst:
+                    AddAimedTelegraphDirections(results, aimedCount, definition.AimedBurstSpreadAngle);
+                    break;
+                case BossPatternType.RadialBurst:
+                    AddRadialTelegraphDirections(results, radialCount, angleOffset);
+                    break;
+                case BossPatternType.Spiral:
+                    AddRadialTelegraphDirections(results, definition.SpiralArmCount, angleOffset);
+                    break;
+                case BossPatternType.Dash:
+                    results.Add(GetDashTelegraphDirection());
+                    break;
+                case BossPatternType.CombinedShot:
+                default:
+                    AddAimedTelegraphDirections(results, aimedCount, definition.AimedSpreadAngle);
+                    AddRadialTelegraphDirections(results, radialCount, angleOffset);
+                    break;
+            }
+        }
+
+        private void AddAimedTelegraphDirections(List<Vector2> results, int count, float spreadAngle)
+        {
+            if (count <= 0 || !Controller.HasTarget)
+            {
+                return;
+            }
+
+            float startAngle = count <= 1 ? 0f : -spreadAngle * 0.5f;
+            float step = count <= 1 ? 0f : spreadAngle / (count - 1);
+            for (int i = 0; i < count; i++)
+            {
+                results.Add(Rotate(Controller.DirectionToTarget, startAngle + step * i));
+            }
+        }
+
+        private static void AddRadialTelegraphDirections(List<Vector2> results, int count, float angleOffset)
+        {
+            if (count <= 0)
+            {
+                return;
+            }
+
+            float step = 360f / count;
+            for (int i = 0; i < count; i++)
+            {
+                float angle = angleOffset + step * i;
+                results.Add(new Vector2(Mathf.Cos(angle * Mathf.Deg2Rad), Mathf.Sin(angle * Mathf.Deg2Rad)));
+            }
+        }
+
+        private Vector2 GetDashTelegraphDirection()
+        {
+            if (lockedDashDirection.sqrMagnitude > 0.0001f)
+            {
+                return lockedDashDirection.normalized;
+            }
+
+            if (Controller != null && Controller.DirectionToTarget.sqrMagnitude > 0.0001f)
+            {
+                return Controller.DirectionToTarget.normalized;
+            }
+
+            return transform.right;
+        }
+
+        private void SetTelegraphLinesVisible(bool visible)
+        {
+            if (telegraphLines == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < telegraphLines.Length; i++)
+            {
+                if (telegraphLines[i] != null)
+                {
+                    telegraphLines[i].enabled = visible;
+                }
+            }
+        }
+
+        private void EnsureTelegraphLineCount(int count)
+        {
+            count = Mathf.Max(1, count);
+            if (telegraphLines != null && telegraphLines.Length >= count)
+            {
+                return;
+            }
+
+            int oldCount = telegraphLines != null ? telegraphLines.Length : 0;
+            LineRenderer[] newLines = new LineRenderer[count];
+            for (int i = 0; i < oldCount; i++)
+            {
+                newLines[i] = telegraphLines[i];
+            }
+
+            for (int i = oldCount; i < count; i++)
+            {
+                newLines[i] = CreateTelegraphLine(i);
+            }
+
+            telegraphLines = newLines;
+        }
+
+        private LineRenderer CreateTelegraphLine(int index)
+        {
+            GameObject lineObject = new GameObject($"Boss Pattern Telegraph Line {index + 1}");
+            lineObject.transform.SetParent(transform, false);
+            LineRenderer line = lineObject.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.positionCount = 2;
+            line.numCapVertices = 0;
+            ApplyTelegraphLineStyle(line);
+            line.enabled = false;
+            return line;
+        }
+
+        private void ApplyTelegraphLineStyle(LineRenderer line)
+        {
+            if (line == null)
+            {
+                return;
+            }
+
+            line.sharedMaterial = definition != null && definition.TelegraphLineMaterial != null
+                ? definition.TelegraphLineMaterial
+                : GetDefaultTelegraphLineMaterial();
+            line.startWidth = definition != null ? definition.TelegraphLineWidth : 0.07f;
+            line.endWidth = 0f;
+            line.startColor = definition != null ? definition.TelegraphLineStartColor : new Color(1f, 0.08f, 0.24f, 0.98f);
+            line.endColor = definition != null ? definition.TelegraphLineEndColor : new Color(1f, 0.08f, 0.24f, 0.08f);
+            line.sortingOrder = definition != null ? definition.TelegraphLineSortingOrder : 36;
+        }
+
+        private static Material GetDefaultTelegraphLineMaterial()
+        {
+            if (defaultTelegraphLineMaterial == null)
+            {
+                defaultTelegraphLineMaterial = new Material(Shader.Find("Sprites/Default"));
+            }
+
+            return defaultTelegraphLineMaterial;
+        }
+
         private Vector3 GetFirePosition(Vector2 direction)
         {
             if (firePoint != null)
@@ -648,11 +861,13 @@ namespace NeonBreaker.Enemies
             {
                 timer = Behavior.definition != null ? Behavior.definition.WindUpTime : 0.35f;
                 Behavior.Stop();
+                Behavior.UpdatePatternTelegraph();
                 Behavior.RaiseAnimationSignal(EnemyAnimationSignal.WindUp);
             }
 
             public override void Tick(float deltaTime)
             {
+                Behavior.UpdatePatternTelegraph();
                 timer -= deltaTime;
                 if (timer <= 0f)
                 {
@@ -669,6 +884,11 @@ namespace NeonBreaker.Enemies
                     Behavior.Controller.RotateToward(Behavior.Controller.DirectionToTarget, enemyDefinition.RotationSpeed);
                 }
             }
+
+            public override void Exit()
+            {
+                Behavior.SetTelegraphLinesVisible(false);
+            }
         }
 
         private sealed class FirePatternState : BehaviorState
@@ -678,6 +898,7 @@ namespace NeonBreaker.Enemies
             public override void Enter()
             {
                 Behavior.RaiseAnimationSignal(EnemyAnimationSignal.Shoot);
+                Behavior.SetTelegraphLinesVisible(false);
                 Behavior.BeginProjectilePattern();
             }
 
@@ -716,11 +937,13 @@ namespace NeonBreaker.Enemies
                 timer = Behavior.definition != null ? Behavior.definition.DashPrepareTime : 0.2f;
                 Behavior.LockDashDirection();
                 Behavior.Stop();
+                Behavior.UpdatePatternTelegraph();
                 Behavior.RaiseAnimationSignal(EnemyAnimationSignal.DashPrepare);
             }
 
             public override void Tick(float deltaTime)
             {
+                Behavior.UpdatePatternTelegraph();
                 timer -= deltaTime;
                 if (timer <= 0f)
                 {
@@ -731,6 +954,11 @@ namespace NeonBreaker.Enemies
             public override void FixedTick(float fixedDeltaTime)
             {
                 Behavior.Stop();
+            }
+
+            public override void Exit()
+            {
+                Behavior.SetTelegraphLinesVisible(false);
             }
         }
 
@@ -744,6 +972,7 @@ namespace NeonBreaker.Enemies
             {
                 timer = Behavior.definition != null ? Behavior.definition.DashDuration : 0.45f;
                 Behavior.lastDashPosition = Behavior.transform.position;
+                Behavior.SetTelegraphLinesVisible(false);
                 Behavior.RaiseAnimationSignal(EnemyAnimationSignal.Dash);
             }
 
@@ -781,6 +1010,7 @@ namespace NeonBreaker.Enemies
             {
                 timer = Behavior.definition != null ? Behavior.definition.RecoveryTime : 0.35f;
                 Behavior.Stop();
+                Behavior.SetTelegraphLinesVisible(false);
                 Behavior.RaiseAnimationSignal(EnemyAnimationSignal.Recovery);
             }
 

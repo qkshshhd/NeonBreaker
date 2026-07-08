@@ -51,13 +51,19 @@ namespace NeonBreaker.Player
 
         public void Move(Vector2 moveInput)
         {
+            Move(moveInput, 1f);
+        }
+
+        public void Move(Vector2 moveInput, float speedMultiplier)
+        {
             if (normalizeMoveInput && moveInput.sqrMagnitude > 1f)
             {
                 moveInput.Normalize();
             }
 
             float effectiveMoveSpeed = stats != null ? stats.GetMoveSpeed(moveSpeed) : moveSpeed;
-            Vector2 targetVelocity = CanMove ? moveInput * effectiveMoveSpeed : Vector2.zero;
+            speedMultiplier = Mathf.Max(0f, speedMultiplier);
+            Vector2 targetVelocity = CanMove ? moveInput * effectiveMoveSpeed * speedMultiplier : Vector2.zero;
             float rate = targetVelocity.sqrMagnitude > 0.0001f ? acceleration : deceleration;
             body.linearVelocity = Vector2.MoveTowards(body.linearVelocity, targetVelocity, rate * Time.fixedDeltaTime);
         }

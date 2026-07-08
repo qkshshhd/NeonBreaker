@@ -14,8 +14,11 @@ namespace NeonBreaker.Enemies
         private readonly StateMachine stateMachine = new StateMachine();
         private readonly RaycastHit2D[] lineOfSightHits = new RaycastHit2D[16];
 
+        private static Material defaultWarningLineMaterial;
+
         private float cooldownTimer;
         private bool setupLogged;
+        private LineRenderer[] warningLines;
 
         private IdleState idleState;
         private PositionState positionState;
@@ -44,12 +47,14 @@ namespace NeonBreaker.Enemies
             cooldownTimer = 0f;
             setupLogged = false;
             ValidateSetup();
+            SetWarningLinesVisible(false);
             stateMachine.ChangeState(idleState);
         }
 
         public override void OnDespawned()
         {
             cooldownTimer = 0f;
+            SetWarningLinesVisible(false);
         }
 
         public override void Tick(float deltaTime)
@@ -81,6 +86,8 @@ namespace NeonBreaker.Enemies
             {
                 Controller.Body.linearVelocity = Vector2.zero;
             }
+
+            SetWarningLinesVisible(false);
         }
 
         private void MoveForRange()
@@ -218,6 +225,124 @@ namespace NeonBreaker.Enemies
             }
 
             projectile.Launch(attackDefinition.ProjectileDefinition, direction, gameObject);
+        }
+
+        private void UpdateWarningTelegraph()
+        {
+            if (attackDefinition == null || !attackDefinition.ShowWarningTelegraph || !Controller.HasTarget)
+            {
+                SetWarningLinesVisible(false);
+                return;
+            }
+
+            int count = attackDefinition.ProjectileCount;
+            EnsureWarningLineCount(count);
+
+            float spread = attackDefinition.SpreadAngle;
+            float startAngle = count <= 1 ? 0f : -spread * 0.5f;
+            float step = count <= 1 ? 0f : spread / (count - 1);
+            Vector3 start = GetFirePosition();
+
+            for (int i = 0; i < warningLines.Length; i++)
+            {
+                LineRenderer line = warningLines[i];
+                bool active = i < count;
+                if (line == null)
+                {
+                    continue;
+                }
+
+                line.enabled = active;
+                if (!active)
+                {
+                    continue;
+                }
+
+                ApplyWarningLineStyle(line);
+                Vector2 direction = Rotate(Controller.DirectionToTarget, startAngle + step * i);
+                Vector3 end = start + (Vector3)(direction * attackDefinition.WarningLineLength);
+                line.SetPosition(0, start);
+                line.SetPosition(1, end);
+            }
+        }
+
+        private void SetWarningLinesVisible(bool visible)
+        {
+            if (warningLines == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < warningLines.Length; i++)
+            {
+                if (warningLines[i] != null)
+                {
+                    warningLines[i].enabled = visible;
+                }
+            }
+        }
+
+        private void EnsureWarningLineCount(int count)
+        {
+            count = Mathf.Max(1, count);
+            if (warningLines != null && warningLines.Length >= count)
+            {
+                return;
+            }
+
+            int oldCount = warningLines != null ? warningLines.Length : 0;
+            LineRenderer[] newLines = new LineRenderer[count];
+            for (int i = 0; i < oldCount; i++)
+            {
+                newLines[i] = warningLines[i];
+            }
+
+            for (int i = oldCount; i < count; i++)
+            {
+                newLines[i] = CreateWarningLine(i);
+            }
+
+            warningLines = newLines;
+        }
+
+        private LineRenderer CreateWarningLine(int index)
+        {
+            GameObject lineObject = new GameObject($"Shooter Warning Line {index + 1}");
+            lineObject.transform.SetParent(transform, false);
+            LineRenderer line = lineObject.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.positionCount = 2;
+            line.numCapVertices = 0;
+            ApplyWarningLineStyle(line);
+            line.enabled = false;
+            return line;
+        }
+
+        private void ApplyWarningLineStyle(LineRenderer line)
+        {
+            if (line == null)
+            {
+                return;
+            }
+
+            line.sharedMaterial = attackDefinition != null && attackDefinition.WarningLineMaterial != null
+                ? attackDefinition.WarningLineMaterial
+                : GetDefaultWarningLineMaterial();
+            line.startWidth = attackDefinition != null ? attackDefinition.WarningLineWidth : 0.045f;
+            line.endWidth = 0f;
+            line.startColor = attackDefinition != null ? attackDefinition.WarningLineStartColor : new Color(1f, 0.18f, 0.28f, 0.95f);
+            line.endColor = attackDefinition != null ? attackDefinition.WarningLineEndColor : new Color(1f, 0.18f, 0.28f, 0.08f);
+            line.sortingOrder = attackDefinition != null ? attackDefinition.WarningLineSortingOrder : 34;
+        }
+
+        private static Material GetDefaultWarningLineMaterial()
+        {
+            if (defaultWarningLineMaterial == null)
+            {
+                defaultWarningLineMaterial = new Material(Shader.Find("Sprites/Default"));
+            }
+
+            return defaultWarningLineMaterial;
         }
 
         private void ValidateSetup()
@@ -419,6 +544,7 @@ namespace NeonBreaker.Enemies
             {
                 timer = Behavior.attackDefinition != null ? Behavior.attackDefinition.WindUpTime : 0.2f;
                 Behavior.Stop();
+                Behavior.UpdateWarningTelegraph();
                 Behavior.RaiseAnimationSignal(EnemyAnimationSignal.WindUp);
             }
 
@@ -430,6 +556,7 @@ namespace NeonBreaker.Enemies
                     return;
                 }
 
+                Behavior.UpdateWarningTelegraph();
                 timer -= deltaTime;
                 if (timer <= 0f)
                 {
@@ -445,6 +572,11 @@ namespace NeonBreaker.Enemies
                 {
                     Behavior.Controller.RotateToward(Behavior.Controller.DirectionToTarget, enemyDefinition.RotationSpeed);
                 }
+            }
+
+            public override void Exit()
+            {
+                Behavior.SetWarningLinesVisible(false);
             }
         }
 

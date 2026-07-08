@@ -33,6 +33,8 @@ namespace NeonBreaker.Enemies
         private IEnemyBehavior behavior;
         private Transform target;
         private bool isDead;
+        private bool behaviorSuppressed;
+        private bool attackSuppressed;
         private Coroutine despawnRoutine;
 
         public EnemyDefinition Definition => definition;
@@ -43,6 +45,8 @@ namespace NeonBreaker.Enemies
         public Transform Target => target;
         public bool HasTarget => target != null;
         public bool IsDead => isDead;
+        public bool IsBehaviorSuppressed => behaviorSuppressed;
+        public bool IsAttackSuppressed => attackSuppressed;
         public static IReadOnlyCollection<EnemyController> ActiveEnemies => ActiveEnemySet;
         public float DistanceToTarget => target == null ? float.PositiveInfinity : ((Vector2)target.position - (Vector2)transform.position).magnitude;
         public Vector2 DirectionToTarget => target == null ? Vector2.zero : ((Vector2)target.position - (Vector2)transform.position).normalized;
@@ -106,7 +110,10 @@ namespace NeonBreaker.Enemies
                 AcquireTarget();
             }
 
-            behavior?.Tick(Time.deltaTime);
+            if (!behaviorSuppressed)
+            {
+                behavior?.Tick(Time.deltaTime);
+            }
         }
 
         private void FixedUpdate()
@@ -116,12 +123,15 @@ namespace NeonBreaker.Enemies
                 return;
             }
 
-            behavior?.FixedTick(Time.fixedDeltaTime);
+            if (!behaviorSuppressed)
+            {
+                behavior?.FixedTick(Time.fixedDeltaTime);
+            }
         }
 
         private void OnCollisionEnter2D(Collision2D collision)
         {
-            if (!isDead)
+            if (!isDead && !behaviorSuppressed)
             {
                 behavior?.OnCollisionEnter2D(collision);
             }
@@ -129,7 +139,7 @@ namespace NeonBreaker.Enemies
 
         private void OnTriggerEnter2D(Collider2D other)
         {
-            if (!isDead)
+            if (!isDead && !behaviorSuppressed)
             {
                 behavior?.OnTriggerEnter2D(other);
             }
@@ -144,6 +154,8 @@ namespace NeonBreaker.Enemies
             }
 
             isDead = false;
+            behaviorSuppressed = false;
+            attackSuppressed = false;
             body.linearVelocity = Vector2.zero;
 
             SetCollidersEnabled(true);
@@ -168,6 +180,21 @@ namespace NeonBreaker.Enemies
             AnimationSignalRaised = null;
             RoomEnemyDied = null;
             behavior?.OnDespawned();
+        }
+
+        public void SetBehaviorSuppressed(bool suppressed, bool stopImmediately = true, bool suppressAttacks = true)
+        {
+            behaviorSuppressed = suppressed;
+            attackSuppressed = suppressed && suppressAttacks;
+            if (suppressed && stopImmediately && body != null)
+            {
+                body.linearVelocity = Vector2.zero;
+            }
+        }
+
+        public void SetAttackSuppressed(bool suppressed)
+        {
+            attackSuppressed = suppressed;
         }
 
         public void AcquireTarget()

@@ -29,6 +29,13 @@ namespace NeonBreaker.Player
         [SerializeField] private float cameraShakeStrength = 0.08f;
         [SerializeField] private float criticalCameraShakeStrength = 0.12f;
 
+        [Header("Movement During Attack")]
+        [SerializeField, Range(0f, 1f)] private float fallbackStartupMoveMultiplier = 0.18f;
+        [SerializeField, Range(0f, 1f)] private float fallbackImpactMoveMultiplier = 0.04f;
+        [SerializeField, Range(0.01f, 0.95f)] private float fallbackImpactNormalizedTime = 0.26f;
+        [SerializeField, Range(0f, 1f)] private float fallbackRecoveryMoveMultiplier = 0.58f;
+        [SerializeField, Range(0f, 1f)] private float fallbackDashCancelNormalizedTime = 0.32f;
+
         private readonly HashSet<IDamageable> damagedTargets = new HashSet<IDamageable>();
         private Collider2D[] hitBuffer;
         private PlayerStats stats;
@@ -37,6 +44,7 @@ namespace NeonBreaker.Player
         private int comboIndex;
         private float comboResetTimer;
         private Coroutine attackRoutine;
+        private MeleeComboDefinition.Step currentAttackStep;
 
         public event Action AttackStarted;
         public event Action AttackSwingVfxRequested;
@@ -112,6 +120,7 @@ namespace NeonBreaker.Player
 
             direction.Normalize();
             MeleeComboDefinition.Step comboStep = GetCurrentComboStep();
+            currentAttackStep = comboStep;
             CurrentComboIndex = comboStep != null ? comboIndex : 0;
             CurrentAttackAnimationIndex = comboStep != null ? comboStep.AnimationIndex : 0;
             CurrentAttackStateDuration = GetAttackStateDuration(comboStep);
@@ -134,6 +143,27 @@ namespace NeonBreaker.Player
             }
 
             return true;
+        }
+
+        public float GetCurrentAttackMovementMultiplier(float elapsedTime)
+        {
+            float normalizedTime = GetAttackNormalizedTime(elapsedTime);
+            if (currentAttackStep != null)
+            {
+                return currentAttackStep.GetMovementMultiplier(normalizedTime);
+            }
+
+            return GetFallbackMovementMultiplier(normalizedTime);
+        }
+
+        public bool CanDashCancelAtElapsed(float elapsedTime)
+        {
+            float normalizedTime = GetAttackNormalizedTime(elapsedTime);
+            float cancelTime = currentAttackStep != null
+                ? currentAttackStep.DashCancelNormalizedTime
+                : fallbackDashCancelNormalizedTime;
+
+            return normalizedTime >= Mathf.Clamp01(cancelTime);
         }
 
         private IEnumerator AttackRoutine(Vector2 direction, MeleeComboDefinition.Step comboStep)
@@ -466,6 +496,25 @@ namespace NeonBreaker.Player
         {
             comboIndex = 0;
             comboResetTimer = 0f;
+        }
+
+        private float GetAttackNormalizedTime(float elapsedTime)
+        {
+            float duration = Mathf.Max(0.01f, CurrentAttackStateDuration);
+            return Mathf.Clamp01(elapsedTime / duration);
+        }
+
+        private float GetFallbackMovementMultiplier(float normalizedTime)
+        {
+            float safeImpactTime = Mathf.Clamp(fallbackImpactNormalizedTime, 0.01f, 0.95f);
+            if (normalizedTime <= safeImpactTime)
+            {
+                float t = Mathf.Clamp01(normalizedTime / safeImpactTime);
+                return Mathf.Lerp(fallbackStartupMoveMultiplier, fallbackImpactMoveMultiplier, t * t * (3f - 2f * t));
+            }
+
+            float recoveryT = Mathf.Clamp01((normalizedTime - safeImpactTime) / Mathf.Max(0.01f, 1f - safeImpactTime));
+            return Mathf.Lerp(fallbackImpactMoveMultiplier, fallbackRecoveryMoveMultiplier, recoveryT * recoveryT * (3f - 2f * recoveryT));
         }
 
         private float GetAttackCooldown(MeleeComboDefinition.Step comboStep)

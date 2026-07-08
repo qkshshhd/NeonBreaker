@@ -214,7 +214,7 @@ namespace NeonBreaker.Enemies
 
         private void TryDamagePlayer(Collider2D other)
         {
-            if (damagedPlayerThisDash || dashDefinition == null)
+            if (damagedPlayerThisDash || dashDefinition == null || Controller == null || Controller.IsAttackSuppressed)
             {
                 return;
             }

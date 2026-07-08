@@ -365,8 +365,9 @@ MonoBehaviour:
   particleRoot: {fileID: 0}
   createDedicatedCanvas: 1
   sortingOrder: 760
+  fallbackScreenSize: {x: 1920, y: 1080}
   particleCount: 64
-  sizeRange: {x: 2.5, y: 6}
+  sizeRange: {x: 5, y: 10}
   speedRange: {x: 6, y: 18}
   horizontalDriftRange: {x: -8, y: 8}
   dustColor: {r: 0.38, g: 0.9, b: 1, a: 0.46}

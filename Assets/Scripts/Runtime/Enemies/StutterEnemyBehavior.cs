@@ -322,7 +322,11 @@ namespace NeonBreaker.Enemies
 
         private bool TryDamagePlayer(Collider2D other)
         {
-            if (other == null || contactDefinition == null || damageCooldownTimer > 0f)
+            if (other == null
+                || contactDefinition == null
+                || damageCooldownTimer > 0f
+                || Controller == null
+                || Controller.IsAttackSuppressed)
             {
                 return false;
             }

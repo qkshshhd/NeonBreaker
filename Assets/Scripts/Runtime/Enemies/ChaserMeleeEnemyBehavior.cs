@@ -20,7 +20,11 @@ namespace NeonBreaker.Enemies
         private HitReactState hitReactState;
 
         private EnemyDefinition Definition => Controller != null ? Controller.Definition : null;
-        private bool CanAttack => attackCooldownTimer <= 0f && Definition != null && Definition.Attack != null;
+        private bool CanAttack => attackCooldownTimer <= 0f
+            && Definition != null
+            && Definition.Attack != null
+            && Controller != null
+            && !Controller.IsAttackSuppressed;
 
         private void Awake()
         {

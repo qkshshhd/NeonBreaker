@@ -25,6 +25,8 @@ MonoBehaviour:
       count: 1
       spawnInterval: 0
       startDelay: 0
+  introTitle: "\uB124\uC628 \uCF54\uC5B4: \uCE74\uC774\uB860"
+  introSubtitle: Final Encounter
   clearReward: 0
   waitForUpgradeRewardBeforeExit: 1
   healAmount: 35

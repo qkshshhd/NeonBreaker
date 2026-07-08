@@ -19,6 +19,8 @@ namespace NeonBreaker.Upgrades
     {
         [Header("Core")]
         [SerializeField] private Button selectButton;
+        [SerializeField] private bool clickWholeCardToSelect = true;
+        [SerializeField] private bool hideLegacySelectButton = true;
         [SerializeField] private Image borderImage;
         [SerializeField] private Outline borderOutline;
         [SerializeField] private Image accentImage;
@@ -61,38 +63,35 @@ namespace NeonBreaker.Upgrades
 
         private static readonly Dictionary<UpgradeCardCategory, Sprite> GeneratedIcons = new Dictionary<UpgradeCardCategory, Sprite>();
 
+        private Button cardButton;
         private Image backgroundImage;
         private int choiceIndex = -1;
         private Action<int> selected;
 
         private void Awake()
         {
-            if (selectButton == null)
-            {
-                selectButton = GetComponent<Button>();
-            }
-
-            if (selectButton == null)
-            {
-                selectButton = GetComponentInChildren<Button>(true);
-            }
-
             CacheBackgroundImage();
+            EnsureCardButton();
+            FindLegacySelectButton();
+            ApplySelectionButtonMode();
         }
 
         private void OnEnable()
         {
-            if (selectButton != null)
+            EnsureCardButton();
+            ApplySelectionButtonMode();
+
+            if (cardButton != null)
             {
-                selectButton.onClick.AddListener(HandleClicked);
+                cardButton.onClick.AddListener(HandleClicked);
             }
         }
 
         private void OnDisable()
         {
-            if (selectButton != null)
+            if (cardButton != null)
             {
-                selectButton.onClick.RemoveListener(HandleClicked);
+                cardButton.onClick.RemoveListener(HandleClicked);
             }
         }
 
@@ -125,6 +124,8 @@ namespace NeonBreaker.Upgrades
             iconBackgroundImage = upgradeIconBackground;
             borderOutline = cardOutline;
             CacheBackgroundImage();
+            EnsureCardButton();
+            ApplySelectionButtonMode();
         }
 
         public void Bind(UpgradeDefinition upgrade, string levelLabel, bool isEliteReward = false)
@@ -224,6 +225,71 @@ namespace NeonBreaker.Upgrades
             if (backgroundImage == null && selectButton != null && selectButton.targetGraphic is Image targetImage)
             {
                 backgroundImage = targetImage;
+            }
+        }
+
+        private void EnsureCardButton()
+        {
+            if (!clickWholeCardToSelect)
+            {
+                cardButton = selectButton;
+                return;
+            }
+
+            if (cardButton == null)
+            {
+                cardButton = GetComponent<Button>();
+            }
+
+            if (cardButton == null)
+            {
+                cardButton = gameObject.AddComponent<Button>();
+            }
+
+            CacheBackgroundImage();
+
+            if (cardButton.targetGraphic == null && backgroundImage != null)
+            {
+                cardButton.targetGraphic = backgroundImage;
+            }
+
+            if (backgroundImage != null)
+            {
+                backgroundImage.raycastTarget = true;
+            }
+        }
+
+        private void FindLegacySelectButton()
+        {
+            if (selectButton != null)
+            {
+                return;
+            }
+
+            Button[] buttons = GetComponentsInChildren<Button>(true);
+            for (int i = 0; i < buttons.Length; i++)
+            {
+                if (buttons[i] != null && buttons[i].gameObject != gameObject)
+                {
+                    selectButton = buttons[i];
+                    return;
+                }
+            }
+
+            selectButton = cardButton;
+        }
+
+        private void ApplySelectionButtonMode()
+        {
+            if (!clickWholeCardToSelect)
+            {
+                return;
+            }
+
+            if (selectButton != null && selectButton != cardButton && hideLegacySelectButton)
+            {
+                selectButton.onClick.RemoveListener(HandleClicked);
+                selectButton.gameObject.SetActive(false);
             }
         }
 

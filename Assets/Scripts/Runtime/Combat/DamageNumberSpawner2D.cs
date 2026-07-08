@@ -11,14 +11,26 @@ namespace NeonBreaker.Combat
         [SerializeField] private bool buildFallbackPopupIfMissing = true;
         [SerializeField] private bool showCriticalNumbers = true;
         [SerializeField] private float minAmountToShow = 0.5f;
-        [SerializeField] private Vector3 spawnOffset = new Vector3(0f, 0.55f, 0f);
-        [SerializeField] private float randomHorizontalOffset = 0.25f;
+        [SerializeField] private Vector3 spawnOffset = new Vector3(0f, 0.75f, 0f);
+        [SerializeField] private float randomHorizontalOffset = 0.35f;
         [SerializeField] private Color normalColor = new Color(0.86f, 0.96f, 1f, 1f);
         [SerializeField] private Color criticalColor = new Color(1f, 0.78f, 0.22f, 1f);
-        [SerializeField, Min(0.1f)] private float normalScale = 1f;
-        [SerializeField, Min(0.1f)] private float criticalScale = 1.25f;
+        [SerializeField, Min(0.1f)] private float fontSize = 4.2f;
+        [SerializeField, Min(0.1f)] private float criticalFontSizeMultiplier = 1.12f;
+        [SerializeField] private bool useOutline = true;
+        [SerializeField, Range(0f, 1f)] private float outlineWidth = 0.18f;
+        [SerializeField] private Color outlineColor = new Color(0f, 0f, 0f, 0.92f);
+        [SerializeField, Min(0.1f)] private float normalScale = 1.35f;
+        [SerializeField, Min(0.1f)] private float criticalScale = 1.7f;
         [SerializeField] private string sortingLayerName = "Default";
-        [SerializeField] private int sortingOrder = 80;
+        [SerializeField] private int sortingOrder = 180;
+
+        [Header("Motion")]
+        [SerializeField, Min(0.05f)] private float lifetime = 0.82f;
+        [SerializeField, Min(0f)] private float riseDistance = 1.05f;
+        [SerializeField, Min(0f)] private float horizontalDrift = 0.28f;
+        [SerializeField] private AnimationCurve alphaCurve = AnimationCurve.EaseInOut(0f, 1f, 1f, 0f);
+        [SerializeField] private AnimationCurve scaleCurve = AnimationCurve.EaseInOut(0f, 1.22f, 1f, 0.9f);
 
         private Health health;
 
@@ -61,8 +73,24 @@ namespace NeonBreaker.Combat
             string value = FormatAmount(activeStyle, damage.Amount, isCritical);
             Color color = GetColor(activeStyle, isCritical);
             float scale = GetScale(activeStyle, isCritical);
+            float activeFontSize = GetFontSize(activeStyle, isCritical);
             FontStyles fontStyle = GetFontStyle(activeStyle, isCritical);
-            popup.Play(value, color, scale, GetSortingLayerName(activeStyle), GetSortingOrder(activeStyle), fontStyle);
+            popup.Play(
+                value,
+                color,
+                scale,
+                GetSortingLayerName(activeStyle),
+                GetSortingOrder(activeStyle),
+                fontStyle,
+                activeFontSize,
+                GetLifetime(activeStyle),
+                GetRiseDistance(activeStyle),
+                GetHorizontalDrift(activeStyle),
+                GetUseOutline(activeStyle),
+                GetOutlineWidth(activeStyle),
+                GetOutlineColor(activeStyle),
+                GetAlphaCurve(activeStyle),
+                GetScaleCurve(activeStyle));
         }
 
         public void ConfigureStyle(DamageNumberStyleDefinition newStyle)
@@ -165,6 +193,53 @@ namespace NeonBreaker.Combat
             return isCritical ? activeStyle.CriticalScale : activeStyle.NormalScale;
         }
 
+        private float GetFontSize(DamageNumberStyleDefinition activeStyle, bool isCritical)
+        {
+            float baseFontSize = activeStyle != null ? activeStyle.FontSize : fontSize;
+            float criticalMultiplier = activeStyle != null ? activeStyle.CriticalFontSizeMultiplier : criticalFontSizeMultiplier;
+            return baseFontSize * (isCritical ? Mathf.Max(0.1f, criticalMultiplier) : 1f);
+        }
+
+        private bool GetUseOutline(DamageNumberStyleDefinition activeStyle)
+        {
+            return activeStyle != null ? activeStyle.UseOutline : useOutline;
+        }
+
+        private float GetOutlineWidth(DamageNumberStyleDefinition activeStyle)
+        {
+            return activeStyle != null ? activeStyle.OutlineWidth : outlineWidth;
+        }
+
+        private Color GetOutlineColor(DamageNumberStyleDefinition activeStyle)
+        {
+            return activeStyle != null ? activeStyle.OutlineColor : outlineColor;
+        }
+
+        private float GetLifetime(DamageNumberStyleDefinition activeStyle)
+        {
+            return activeStyle != null ? activeStyle.Lifetime : lifetime;
+        }
+
+        private float GetRiseDistance(DamageNumberStyleDefinition activeStyle)
+        {
+            return activeStyle != null ? activeStyle.RiseDistance : riseDistance;
+        }
+
+        private float GetHorizontalDrift(DamageNumberStyleDefinition activeStyle)
+        {
+            return activeStyle != null ? activeStyle.HorizontalDrift : horizontalDrift;
+        }
+
+        private AnimationCurve GetAlphaCurve(DamageNumberStyleDefinition activeStyle)
+        {
+            return activeStyle != null ? activeStyle.AlphaCurve : alphaCurve;
+        }
+
+        private AnimationCurve GetScaleCurve(DamageNumberStyleDefinition activeStyle)
+        {
+            return activeStyle != null ? activeStyle.ScaleCurve : scaleCurve;
+        }
+
         private string GetSortingLayerName(DamageNumberStyleDefinition activeStyle)
         {
             return activeStyle != null ? activeStyle.SortingLayerName : sortingLayerName;
@@ -182,7 +257,7 @@ namespace NeonBreaker.Combat
 
             TextMeshPro text = popupObject.AddComponent<TextMeshPro>();
             text.alignment = TextAlignmentOptions.Center;
-            text.fontSize = 2.4f;
+            text.fontSize = 4.2f;
             text.textWrappingMode = TextWrappingModes.NoWrap;
             text.raycastTarget = false;
 

@@ -19,26 +19,18 @@ MonoBehaviour:
   clearDelay: 0.4
   waves:
   - displayName: 
-    startDelay: 1
-    spawnGroups:
-    - poolKey: {fileID: 11400000, guid: 2a7f27529e2097a44a94f5a2f2b7eee9, type: 2}
-      count: 1
-      spawnInterval: 0.2
-      startDelay: 1
-    - poolKey: {fileID: 11400000, guid: bc7f334c5003fb24192b6df45c5e49f6, type: 2}
-      count: 1
-      spawnInterval: 0.2
-      startDelay: 1
-  - displayName: 
-    startDelay: 1
+    startDelay: 0.8
     spawnGroups:
     - poolKey: {fileID: 11400000, guid: cbda9eb0a059f4348b058d2df9b2362b, type: 2}
-      count: 6
-      spawnInterval: 0.2
+      count: 4
+      spawnInterval: 0.3
       startDelay: 1
-    - poolKey: {fileID: 11400000, guid: 2a7f27529e2097a44a94f5a2f2b7eee9, type: 2}
-      count: 3
-      spawnInterval: 1
+  - displayName: 
+    startDelay: 1.2
+    spawnGroups:
+    - poolKey: {fileID: 11400000, guid: cbda9eb0a059f4348b058d2df9b2362b, type: 2}
+      count: 4
+      spawnInterval: 0.3
       startDelay: 1
   clearReward: 0
   waitForUpgradeRewardBeforeExit: 1

@@ -36,6 +36,10 @@ namespace NeonBreaker.UI
         [SerializeField, Min(24f)] private float objectiveRadiusAroundPlayer = 112f;
         [SerializeField] private string rewardLabel = "UPGRADE";
         [SerializeField] private string exitLabel = "NEXT";
+        [SerializeField] private bool alwaysShowExitGuide = true;
+        [SerializeField] private bool preferExitDirectionFallback = true;
+        [SerializeField, Min(0f)] private float exitGuideOutsideRoomCells = 1.5f;
+        [SerializeField, Min(0f)] private float passedExitSwitchDistance = 0.9f;
 
         [Header("Enemy Direction Guide")]
         [SerializeField] private bool showEnemyDirections = true;
@@ -72,21 +76,21 @@ namespace NeonBreaker.UI
         {
             ResolveSources();
 
+            SetEnemyArrowsVisible(0);
+
+            if (TryGetObjective(out Objective objective))
+            {
+                UpdateMarker(objective);
+                return;
+            }
+
             if (UpdateEnemyDirections())
             {
                 SetVisible(false);
                 return;
             }
 
-            SetEnemyArrowsVisible(0);
-
-            if (!TryGetObjective(out Objective objective))
-            {
-                SetVisible(false);
-                return;
-            }
-
-            UpdateMarker(objective);
+            SetVisible(false);
         }
 
         private bool TryGetObjective(out Objective objective)
@@ -98,33 +102,152 @@ namespace NeonBreaker.UI
                 Transform reward = GetRewardTransform();
                 if (reward != null)
                 {
-                    objective = new Objective(reward.position, rewardLabel, rewardColor);
+                    objective = new Objective(reward.position, rewardLabel, rewardColor, false);
                     return true;
                 }
             }
 
             if (runManager != null && runManager.IsWaitingForExit && runManager.HasNextRoom)
             {
-                if (dungeonGenerator != null && dungeonGenerator.TryGetRoomExitDoorCenterWorld(runManager.CurrentRoomIndex, out Vector3 doorPosition))
+                if (TryGetExitGuidePosition(out Vector3 exitPosition))
                 {
-                    objective = new Objective(doorPosition, exitLabel, exitColor);
+                    objective = new Objective(exitPosition, exitLabel, exitColor, alwaysShowExitGuide);
                     return true;
                 }
 
                 if (roomExit != null && roomExit.gameObject.activeInHierarchy)
                 {
-                    objective = new Objective(roomExit.transform.position, exitLabel, exitColor);
+                    objective = new Objective(roomExit.transform.position, exitLabel, exitColor, alwaysShowExitGuide);
                     return true;
                 }
 
                 if (dungeonGenerator != null)
                 {
-                    objective = new Objective(dungeonGenerator.GetRoomCenterWorld(runManager.CurrentRoomIndex + 1), exitLabel, exitColor);
+                    objective = new Objective(dungeonGenerator.GetRoomCenterWorld(runManager.CurrentRoomIndex + 1), exitLabel, exitColor, alwaysShowExitGuide);
                     return true;
                 }
             }
 
             return false;
+        }
+
+        private bool TryGetExitGuidePosition(out Vector3 position)
+        {
+            position = default;
+            if (runManager == null || dungeonGenerator == null || !runManager.HasNextRoom)
+            {
+                return false;
+            }
+
+            int currentIndex = runManager.CurrentRoomIndex;
+            int nextIndex = currentIndex + 1;
+            Vector3 currentCenter = dungeonGenerator.GetRoomCenterWorld(currentIndex);
+            Vector3 nextCenter = dungeonGenerator.GetRoomCenterWorld(nextIndex);
+            Vector3 nextRoomTarget = dungeonGenerator.TryGetSafeRoomWorldPosition(nextIndex, out Vector3 safeNextPosition)
+                ? safeNextPosition
+                : nextCenter;
+
+            if (dungeonGenerator.TryGetRoomExitDoorCenterWorld(currentIndex, out Vector3 doorPosition)
+                && IsExitDoorPointingTowardNextRoom(currentCenter, nextCenter, doorPosition))
+            {
+                position = HasPlayerPassedExit(currentCenter, nextCenter, doorPosition)
+                    ? nextRoomTarget
+                    : doorPosition;
+                return true;
+            }
+
+            if (!preferExitDirectionFallback)
+            {
+                return false;
+            }
+
+            if (TryGetDirectionalExitFallback(currentIndex, currentCenter, nextCenter, out Vector3 fallbackExitPosition))
+            {
+                position = HasPlayerPassedExit(currentCenter, nextCenter, fallbackExitPosition)
+                    ? nextRoomTarget
+                    : fallbackExitPosition;
+                return true;
+            }
+
+            position = nextRoomTarget;
+            return true;
+        }
+
+        private bool HasPlayerPassedExit(Vector3 currentCenter, Vector3 nextCenter, Vector3 exitPosition)
+        {
+            if (player == null)
+            {
+                return false;
+            }
+
+            Vector2 directionToNext = nextCenter - currentCenter;
+            if (directionToNext.sqrMagnitude <= 0.0001f)
+            {
+                return false;
+            }
+
+            Vector2 playerFromExit = player.position - exitPosition;
+            float passedDistance = Vector2.Dot(playerFromExit, directionToNext.normalized);
+            return passedDistance > Mathf.Max(0f, passedExitSwitchDistance);
+        }
+
+        private static bool IsExitDoorPointingTowardNextRoom(Vector3 currentCenter, Vector3 nextCenter, Vector3 doorPosition)
+        {
+            Vector2 toNext = nextCenter - currentCenter;
+            Vector2 toDoor = doorPosition - currentCenter;
+            if (toNext.sqrMagnitude <= 0.0001f || toDoor.sqrMagnitude <= 0.0001f)
+            {
+                return true;
+            }
+
+            return Vector2.Dot(toNext.normalized, toDoor.normalized) > 0.25f;
+        }
+
+        private bool TryGetDirectionalExitFallback(int currentIndex, Vector3 currentCenter, Vector3 nextCenter, out Vector3 position)
+        {
+            position = nextCenter;
+
+            Vector2 toNext = nextCenter - currentCenter;
+            if (toNext.sqrMagnitude <= 0.0001f)
+            {
+                return false;
+            }
+
+            Vector2Int direction = Mathf.Abs(toNext.x) >= Mathf.Abs(toNext.y)
+                ? new Vector2Int(toNext.x >= 0f ? 1 : -1, 0)
+                : new Vector2Int(0, toNext.y >= 0f ? 1 : -1);
+
+            if (!dungeonGenerator.TryGetRoomBounds(currentIndex, out RectInt roomBounds)
+                || dungeonGenerator.FloorTilemap == null)
+            {
+                position = currentCenter + (Vector3)(toNext.normalized * 4f);
+                return true;
+            }
+
+            Vector2 roomCenter = roomBounds.center;
+            int cellX = Mathf.RoundToInt(roomCenter.x);
+            int cellY = Mathf.RoundToInt(roomCenter.y);
+            int outsideCells = Mathf.Max(1, Mathf.RoundToInt(exitGuideOutsideRoomCells));
+
+            if (direction.x > 0)
+            {
+                cellX = roomBounds.xMax + outsideCells;
+            }
+            else if (direction.x < 0)
+            {
+                cellX = roomBounds.xMin - outsideCells - 1;
+            }
+            else if (direction.y > 0)
+            {
+                cellY = roomBounds.yMax + outsideCells;
+            }
+            else
+            {
+                cellY = roomBounds.yMin - outsideCells - 1;
+            }
+
+            position = dungeonGenerator.FloorTilemap.GetCellCenterWorld(new Vector3Int(cellX, cellY, 0));
+            return true;
         }
 
         private Transform GetRewardTransform()
@@ -166,7 +289,7 @@ namespace NeonBreaker.UI
                 && screenPoint.y <= Screen.height - safePadding;
 
             float distance = player != null ? Vector2.Distance(player.position, objective.WorldPosition) : 0f;
-            if (targetOnScreen && !showWhenTargetIsOnScreen || distance <= hideDistance)
+            if (targetOnScreen && !showWhenTargetIsOnScreen && !objective.AlwaysShowWhenOnScreen || distance <= hideDistance)
             {
                 SetVisible(false);
                 return;
@@ -516,16 +639,18 @@ namespace NeonBreaker.UI
 
         private readonly struct Objective
         {
-            public Objective(Vector3 worldPosition, string label, Color color)
+            public Objective(Vector3 worldPosition, string label, Color color, bool alwaysShowWhenOnScreen)
             {
                 WorldPosition = worldPosition;
                 Label = label;
                 Color = color;
+                AlwaysShowWhenOnScreen = alwaysShowWhenOnScreen;
             }
 
             public Vector3 WorldPosition { get; }
             public string Label { get; }
             public Color Color { get; }
+            public bool AlwaysShowWhenOnScreen { get; }
         }
 
         private readonly struct EnemyDirection

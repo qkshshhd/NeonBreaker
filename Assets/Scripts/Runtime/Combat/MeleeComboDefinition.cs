@@ -37,6 +37,14 @@ namespace NeonBreaker.Combat
             [SerializeField, Min(0f)] private float knockbackMultiplier = 1f;
             [SerializeField] private HitWindow[] hitWindows;
 
+            [Header("Movement During Attack")]
+            [SerializeField, Range(0f, 1f)] private float startupMoveMultiplier = 0.18f;
+            [SerializeField, Range(0f, 1f)] private float impactMoveMultiplier = 0.04f;
+            [SerializeField, Range(0.01f, 0.95f)] private float impactNormalizedTime = 0.26f;
+            [SerializeField, Range(0f, 1f)] private float recoveryMoveMultiplier = 0.58f;
+            [SerializeField, Range(0f, 1f)] private float dashCancelNormalizedTime = 0.32f;
+            [SerializeField] private AnimationCurve movementMultiplierCurve;
+
             public string DisplayName => displayName;
             public int AnimationIndex => animationIndex;
             public float Cooldown => cooldown;
@@ -46,6 +54,7 @@ namespace NeonBreaker.Combat
             public float Angle => angle;
             public float KnockbackMultiplier => knockbackMultiplier;
             public HitWindow[] HitWindows => hitWindows;
+            public float DashCancelNormalizedTime => dashCancelNormalizedTime;
 
             public float Duration
             {
@@ -65,6 +74,26 @@ namespace NeonBreaker.Combat
 
                     return Mathf.Max(cooldown, lastHitTime + recoveryTime);
                 }
+            }
+
+            public float GetMovementMultiplier(float normalizedTime)
+            {
+                normalizedTime = Mathf.Clamp01(normalizedTime);
+
+                if (movementMultiplierCurve != null && movementMultiplierCurve.length > 0)
+                {
+                    return Mathf.Clamp01(movementMultiplierCurve.Evaluate(normalizedTime));
+                }
+
+                float safeImpactTime = Mathf.Clamp(impactNormalizedTime, 0.01f, 0.95f);
+                if (normalizedTime <= safeImpactTime)
+                {
+                    float t = Mathf.Clamp01(normalizedTime / safeImpactTime);
+                    return Mathf.Lerp(startupMoveMultiplier, impactMoveMultiplier, t * t * (3f - 2f * t));
+                }
+
+                float recoveryT = Mathf.Clamp01((normalizedTime - safeImpactTime) / Mathf.Max(0.01f, 1f - safeImpactTime));
+                return Mathf.Lerp(impactMoveMultiplier, recoveryMoveMultiplier, recoveryT * recoveryT * (3f - 2f * recoveryT));
             }
         }
 

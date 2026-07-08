@@ -1,5 +1,7 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
+using NeonBreaker.Combat;
 using NeonBreaker.Enemies;
 using NeonBreaker.Player;
 using NeonBreaker.Pooling;
@@ -52,11 +54,15 @@ namespace NeonBreaker.Tutorial
         [SerializeField] private bool spawnPracticeEnemyForRecoil = true;
         [SerializeField] private PoolKey practiceEnemyPoolKey;
         [SerializeField, Min(1)] private int practiceEnemyCount = 1;
+        [SerializeField, Min(1f)] private float practiceEnemyMaxHealth = 999f;
+        [SerializeField, Min(0f)] private float practiceEnemyInvulnerability = 0f;
+        [SerializeField] private bool suppressPracticeEnemyBehavior = true;
+        [SerializeField, Min(0.5f)] private float practiceEnemySpawnDistance = 2.4f;
         [SerializeField] private string completionPrefsKey = "NeonBreaker.Tutorial.Completed";
         [SerializeField, Min(0f)] private float stepAdvanceDelay = 0.18f;
         [SerializeField, Min(0f)] private float minimumStepVisibleTime = 1.15f;
         [SerializeField, Min(0.1f)] private float movementDistanceToComplete = 1.4f;
-        [SerializeField, Range(0.01f, 1f)] private float recoilRatioToTeachSkill = 0.3f;
+        [SerializeField, Range(0.01f, 1f)] private float recoilRatioToTeachSkill = 0.75f;
         [SerializeField, Min(1)] private int comboStepToComplete = 3;
 
         private TutorialStep currentStep;
@@ -68,6 +74,7 @@ namespace NeonBreaker.Tutorial
         private bool combatStartLocked;
         private bool practiceEnemySpawnRequested;
         private int alivePracticeEnemyCount;
+        private readonly List<EnemyController> practiceEnemies = new List<EnemyController>();
         private Coroutine combatHintHideRoutine;
 
         public bool IsRunning => isRunning;
@@ -427,6 +434,7 @@ namespace NeonBreaker.Tutorial
 
             if (currentStep == TutorialStep.ClearRoom)
             {
+                ClearPracticeEnemies();
                 ReleaseCombatStartLock();
                 if (hideHintDuringCombat && hintUI != null)
                 {
@@ -508,7 +516,7 @@ namespace NeonBreaker.Tutorial
                 TutorialStep.Move => "[WASD]로 이동하세요",
                 TutorialStep.BasicAttack => "[좌클릭]으로 기본 공격을 사용하세요",
                 TutorialStep.Combo => "연속 공격으로 3타 콤보까지 이어보세요",
-                TutorialStep.Dash => "[Space]로 대쉬하세요. 공격 중에도 회피할 수 있습니다",
+                TutorialStep.Dash => "[Shift]로 대쉬하세요. 공격 중에도 회피할 수 있습니다",
                 TutorialStep.BuildRecoil => "기본 공격을 맞히면 반동이 쌓입니다. 반동을 30%까지 쌓아보세요",
                 TutorialStep.SkillDischarge => "[스킬]로 반동을 방출하세요. 반동이 높을수록 스킬이 강해집니다",
                 TutorialStep.ClearRoom => "남은 적을 처치해 방을 클리어하세요",
@@ -522,8 +530,39 @@ namespace NeonBreaker.Tutorial
             return true;
         }
 
+        private bool ShowReadableCurrentStep()
+        {
+            if (hintUI == null)
+            {
+                return false;
+            }
+
+            string body = currentStep switch
+            {
+                TutorialStep.Move => "[WASD]로 이동해보세요. ",
+                TutorialStep.BasicAttack => "[좌클릭]으로 기본 공격을 사용하세요. ",
+                TutorialStep.Combo => "공격을 이어서 3타 콤보까지 사용해보세요. 콤보는 총 5타까지 있으며 콤보마다 범위와 타격 방식이 달라집니다.",
+                TutorialStep.Dash => "[Space]로 대쉬하세요. 공격 직후에도 일정 타이밍부터 대쉬로 빠져나갈 수 있습니다.",
+                TutorialStep.BuildRecoil => "반동 게이지를 모아보세요. 기본 공격을 맞히면 반동이 쌓이고, 반동은 기본 공격력과 스킬 피해/넉백을 올려줍니다.",
+                TutorialStep.SkillDischarge => "[우클릭]으로 스킬을 사용해 반동을 방출하세요. 반동이 높을수록 스킬이 강해지지만, 너무 오래 쌓으면 부담도 커집니다.",
+                TutorialStep.ClearRoom => "이제 실제 전투가 시작됩니다. 남은 적을 처치하고 방을 클리어하세요.",
+                TutorialStep.SelectUpgrade => "증강을 선택하세요. 지금 빌드에 필요한 공격/생존/특수 효과를 보고 고르면 됩니다.",
+                TutorialStep.ExitRoom => "열린 문으로 이동하세요. 네비게이터가 다음 목적지 방향을 알려줍니다.",
+                _ => string.Empty
+            };
+
+            currentStepShownAt = Time.unscaledTime;
+            hintUI.TransitionTo("튜토리얼", body);
+            return true;
+        }
+
         private void ShowCurrentStep()
         {
+            if (ShowReadableCurrentStep())
+            {
+                return;
+            }
+
             if (ShowCurrentStepWithTransition())
             {
                 return;
@@ -575,7 +614,7 @@ namespace NeonBreaker.Tutorial
             for (int i = 0; i < count; i++)
             {
                 IRoomEnemy spawnedEnemy = null;
-                yield return enemySpawner.SpawnEnemyRoutine(poolKey, enemy => spawnedEnemy = enemy);
+                yield return enemySpawner.SpawnEnemyRoutine(poolKey, enemy => spawnedEnemy = enemy, GetPracticeEnemySpawnPosition());
                 RegisterPracticeEnemy(spawnedEnemy);
             }
         }
@@ -589,6 +628,21 @@ namespace NeonBreaker.Tutorial
 
             alivePracticeEnemyCount++;
             enemy.Died += HandlePracticeEnemyDied;
+
+            EnemyController enemyController = enemy as EnemyController;
+            if (enemyController == null && enemy is MonoBehaviour behaviour)
+            {
+                enemyController = behaviour.GetComponent<EnemyController>();
+            }
+
+            if (enemyController == null)
+            {
+                return;
+            }
+
+            enemyController.InitializeHealth(practiceEnemyMaxHealth, practiceEnemyInvulnerability);
+            enemyController.SetBehaviorSuppressed(suppressPracticeEnemyBehavior);
+            practiceEnemies.Add(enemyController);
         }
 
         private void HandlePracticeEnemyDied(IRoomEnemy enemy)
@@ -599,6 +653,44 @@ namespace NeonBreaker.Tutorial
             }
 
             alivePracticeEnemyCount = Mathf.Max(0, alivePracticeEnemyCount - 1);
+        }
+
+        private Vector3 GetPracticeEnemySpawnPosition()
+        {
+            if (player == null)
+            {
+                return transform.position;
+            }
+
+            Vector2 direction = Vector2.right;
+            if (player.Input != null && player.Input.AimDirection.sqrMagnitude > 0.001f)
+            {
+                direction = player.Input.AimDirection.normalized;
+            }
+            else if (player.Input != null && player.Input.MoveInput.sqrMagnitude > 0.001f)
+            {
+                direction = player.Input.MoveInput.normalized;
+            }
+
+            return player.transform.position + (Vector3)(direction * Mathf.Max(0.5f, practiceEnemySpawnDistance));
+        }
+
+        private void ClearPracticeEnemies()
+        {
+            for (int i = practiceEnemies.Count - 1; i >= 0; i--)
+            {
+                EnemyController enemy = practiceEnemies[i];
+                if (enemy == null || enemy.IsDead)
+                {
+                    continue;
+                }
+
+                enemy.SetBehaviorSuppressed(false);
+                enemy.DespawnToPool();
+            }
+
+            practiceEnemies.Clear();
+            alivePracticeEnemyCount = 0;
         }
 
         private PoolKey ResolvePracticeEnemyPoolKey()
@@ -681,6 +773,7 @@ namespace NeonBreaker.Tutorial
         {
             isRunning = false;
             currentStep = TutorialStep.Complete;
+            ClearPracticeEnemies();
             ReleaseCombatStartLock();
 
             if (combatHintHideRoutine != null)
@@ -702,6 +795,9 @@ namespace NeonBreaker.Tutorial
 
             if (showFinalMessage)
             {
+                hintUI.Show("튜토리얼 완료", "반동을 관리하며 방을 돌파하세요.");
+                Invoke(nameof(HideHint), 1.6f);
+                return;
                 hintUI.Show("튜토리얼 완료", "반동을 관리하며 방을 돌파하세요");
                 Invoke(nameof(HideHint), 1.6f);
             }

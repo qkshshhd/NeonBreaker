@@ -15,7 +15,8 @@ namespace NeonBreaker.Rooms
         [SerializeField] private GameObject[] activateOnClear;
         [SerializeField] private bool playBossIntro = true;
         [SerializeField, Min(0f)] private float bossIntroDuration = 1.35f;
-        [SerializeField] private string bossIntroTitle = "BOSS";
+        [SerializeField] private string fallbackBossIntroTitle = "BOSS";
+        [SerializeField] private string fallbackBossIntroSubtitle = "Final Encounter";
         [SerializeField] private bool playBossIntroAfterFirstSpawn = true;
         [SerializeField] private bool pauseTimeDuringBossIntro = true;
         [SerializeField] private bool spawnFirstBossAtRoomCenter = true;
@@ -178,10 +179,12 @@ namespace NeonBreaker.Rooms
             }
 
             bossIntroPlayedThisRoom = true;
-            string title = string.IsNullOrWhiteSpace(bossIntroTitle) ? "BOSS" : bossIntroTitle;
-            string subtitle = room != null && !string.IsNullOrWhiteSpace(room.DisplayName)
-                ? room.DisplayName
-                : "Final Encounter";
+            string title = room != null && !string.IsNullOrWhiteSpace(room.IntroTitle)
+                ? room.IntroTitle
+                : fallbackBossIntroTitle;
+            string subtitle = room != null && !string.IsNullOrWhiteSpace(room.IntroSubtitle)
+                ? room.IntroSubtitle
+                : fallbackBossIntroSubtitle;
 
             float previousTimeScale = Time.timeScale;
             float previousFixedDeltaTime = Time.fixedDeltaTime;

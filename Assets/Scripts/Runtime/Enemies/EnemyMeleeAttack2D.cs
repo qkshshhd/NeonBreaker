@@ -30,6 +30,12 @@ namespace NeonBreaker.Enemies
                 return 0;
             }
 
+            EnemyController controller = GetComponentInParent<EnemyController>();
+            if (controller != null && controller.IsAttackSuppressed)
+            {
+                return 0;
+            }
+
             if (direction.sqrMagnitude <= 0.0001f)
             {
                 direction = transform.right;
@@ -132,4 +138,3 @@ namespace NeonBreaker.Enemies
         }
     }
 }
-

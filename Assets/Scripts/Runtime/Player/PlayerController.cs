@@ -339,6 +339,7 @@ namespace NeonBreaker.Player
         private sealed class PlayerAttackState : PlayerState
         {
             private float timer;
+            private float elapsedTime;
 
             public PlayerAttackState(PlayerController controller) : base(controller)
             {
@@ -348,11 +349,16 @@ namespace NeonBreaker.Player
             {
                 bool didAttack = Controller.attack.TryAttack(Controller.input.AimDirection);
                 timer = didAttack ? Controller.attack.CurrentAttackStateDuration : 0f;
+                elapsedTime = 0f;
             }
 
             public override void Tick(float deltaTime)
             {
-                if (Controller.dashCanCancelAttack && Controller.TryStartBufferedDash())
+                elapsedTime += deltaTime;
+
+                if (Controller.dashCanCancelAttack
+                    && Controller.attack.CanDashCancelAtElapsed(elapsedTime)
+                    && Controller.TryStartBufferedDash())
                 {
                     return;
                 }
@@ -366,7 +372,8 @@ namespace NeonBreaker.Player
 
             public override void FixedTick(float fixedDeltaTime)
             {
-                Controller.movement.Move(Vector2.zero);
+                float multiplier = Controller.attack.GetCurrentAttackMovementMultiplier(elapsedTime);
+                Controller.movement.Move(Controller.input.MoveInput, multiplier);
             }
         }
 

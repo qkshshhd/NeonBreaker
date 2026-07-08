@@ -25,32 +25,34 @@ namespace NeonBreaker.UI
         [SerializeField, Min(0.01f)] private float enterSpeed = 8f;
         [SerializeField, Min(0.01f)] private float exitSpeed = 4f;
         [SerializeField, Range(0.25f, 3f)] private float pressureCurve = 1.35f;
+        [SerializeField, Range(0.1f, 1f)] private float pressureOutputScale = 0.62f;
+        [SerializeField, Range(0.1f, 1f)] private float maxDisplayedPressure = 0.72f;
 
         [Header("Low Health Pulse")]
         [SerializeField, Min(0f)] private float pulseSpeed = 4.4f;
-        [SerializeField, Range(0f, 1f)] private float pulseAmount = 0.42f;
-        [SerializeField, Range(0f, 1f)] private float vignettePulseBoost = 0.13f;
-        [SerializeField, Range(0f, 4f)] private float bloomPulseBoost = 1.35f;
-        [SerializeField, Range(0f, 1f)] private float colorPulseBoost = 0.12f;
+        [SerializeField, Range(0f, 1f)] private float pulseAmount = 0.24f;
+        [SerializeField, Range(0f, 1f)] private float vignettePulseBoost = 0.055f;
+        [SerializeField, Range(0f, 4f)] private float bloomPulseBoost = 0.42f;
+        [SerializeField, Range(0f, 1f)] private float colorPulseBoost = 0.045f;
 
         [Header("Damage Kick")]
-        [SerializeField, Range(0f, 1f)] private float damageKickAmount = 0.35f;
-        [SerializeField, Min(0.01f)] private float damageKickDuration = 0.2f;
+        [SerializeField, Range(0f, 1f)] private float damageKickAmount = 0.16f;
+        [SerializeField, Min(0.01f)] private float damageKickDuration = 0.16f;
 
         [Header("Vignette")]
         [SerializeField] private Color hurtColor = new Color(1f, 0.02f, 0.08f, 1f);
-        [SerializeField, Range(0f, 1f)] private float maxVignetteIntensity = 0.42f;
-        [SerializeField, Range(0f, 1f)] private float maxVignetteSmoothness = 0.58f;
+        [SerializeField, Range(0f, 1f)] private float maxVignetteIntensity = 0.26f;
+        [SerializeField, Range(0f, 1f)] private float maxVignetteSmoothness = 0.48f;
 
         [Header("Bloom")]
-        [SerializeField, Range(0f, 8f)] private float bloomIntensityBoost = 0.9f;
-        [SerializeField, Range(0f, 1f)] private float bloomScatter = 0.62f;
-        [SerializeField, Range(0f, 1f)] private float bloomThreshold = 0.72f;
+        [SerializeField, Range(0f, 8f)] private float bloomIntensityBoost = 0.32f;
+        [SerializeField, Range(0f, 1f)] private float bloomScatter = 0.42f;
+        [SerializeField, Range(0f, 1f)] private float bloomThreshold = 0.82f;
 
         [Header("Color Adjustments")]
-        [SerializeField, Range(-100f, 100f)] private float maxSaturationDrop = -24f;
-        [SerializeField, Range(-100f, 100f)] private float maxContrastBoost = 12f;
-        [SerializeField, Range(-2f, 2f)] private float maxPostExposureDrop = -0.18f;
+        [SerializeField, Range(-100f, 100f)] private float maxSaturationDrop = -10f;
+        [SerializeField, Range(-100f, 100f)] private float maxContrastBoost = 5f;
+        [SerializeField, Range(-2f, 2f)] private float maxPostExposureDrop = -0.06f;
 
         [Header("Runtime Debug")]
         [SerializeField] private bool logBindingProblems;
@@ -342,7 +344,8 @@ namespace NeonBreaker.UI
                 ? 0f
                 : Mathf.Clamp01(damageKickTimer / damageKickDuration) * damageKickAmount;
 
-            return Mathf.Clamp01(lowHealthPressure + kick);
+            float scaledPressure = (lowHealthPressure + kick) * pressureOutputScale;
+            return Mathf.Min(maxDisplayedPressure, Mathf.Clamp01(scaledPressure));
         }
 
         private void ApplyVolume(float pressure)

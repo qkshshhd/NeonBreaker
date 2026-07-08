@@ -19,19 +19,19 @@ MonoBehaviour:
   clearDelay: 1
   waves:
   - displayName: 
-    startDelay: 1
+    startDelay: 0.8
     spawnGroups:
     - poolKey: {fileID: 11400000, guid: cbda9eb0a059f4348b058d2df9b2362b, type: 2}
       count: 3
-      spawnInterval: 0.2
+      spawnInterval: 0.35
       startDelay: 1
   - displayName: 
-    startDelay: 2
+    startDelay: 1.2
     spawnGroups:
     - poolKey: {fileID: 11400000, guid: cbda9eb0a059f4348b058d2df9b2362b, type: 2}
-      count: 5
-      spawnInterval: 0.2
-      startDelay: 2
+      count: 3
+      spawnInterval: 0.35
+      startDelay: 1
   clearReward: 0
   waitForUpgradeRewardBeforeExit: 1
   healAmount: 35

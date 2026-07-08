@@ -19,27 +19,23 @@ MonoBehaviour:
   clearDelay: 1
   waves:
   - displayName: 
-    startDelay: 1
+    startDelay: 0.8
     spawnGroups:
     - poolKey: {fileID: 11400000, guid: cbda9eb0a059f4348b058d2df9b2362b, type: 2}
       count: 3
-      spawnInterval: 0.2
+      spawnInterval: 0.35
       startDelay: 1
-    - poolKey: {fileID: 11400000, guid: 2a7f27529e2097a44a94f5a2f2b7eee9, type: 2}
-      count: 1
-      spawnInterval: 1
-      startDelay: 3
   - displayName: 
-    startDelay: 2
+    startDelay: 1.2
     spawnGroups:
-    - poolKey: {fileID: 11400000, guid: 566b50d07bd97034ea900b6d768768e7, type: 2}
-      count: 1
-      spawnInterval: 0.2
+    - poolKey: {fileID: 11400000, guid: cbda9eb0a059f4348b058d2df9b2362b, type: 2}
+      count: 2
+      spawnInterval: 0.35
       startDelay: 1
     - poolKey: {fileID: 11400000, guid: 2a7f27529e2097a44a94f5a2f2b7eee9, type: 2}
       count: 1
       spawnInterval: 1
-      startDelay: 2
+      startDelay: 0.4
   clearReward: 0
   waitForUpgradeRewardBeforeExit: 1
   healAmount: 35

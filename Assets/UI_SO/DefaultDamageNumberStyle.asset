@@ -19,11 +19,67 @@ MonoBehaviour:
   randomHorizontalOffset: 0.25
   normalFormat: '{0}'
   criticalFormat: '{0}!'
-  normalFontStyle: 0
+  normalFontStyle: 1
   criticalFontStyle: 1
-  normalColor: {r: 0, g: 0.1878432, b: 1, a: 1}
+  fontSize: 3
+  criticalFontSizeMultiplier: 1.12
+  useOutline: 1
+  outlineWidth: 0.18
+  outlineColor: {r: 0, g: 0, b: 0, a: 0.92}
+  normalColor: {r: 0.6698113, g: 0.7319644, b: 1, a: 1}
   criticalColor: {r: 1, g: 0.78, b: 0.22, a: 1}
   normalScale: 1
   criticalScale: 1.25
   sortingLayerName: Default
   sortingOrder: 80
+  lifetime: 0.82
+  riseDistance: 1.05
+  horizontalDrift: 0.28
+  alphaCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  scaleCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1.22
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0.9
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4

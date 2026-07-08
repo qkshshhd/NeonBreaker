@@ -14,6 +14,10 @@ namespace NeonBreaker.Rooms
         [SerializeField] private float clearDelay = 0.4f;
         [SerializeField] private EncounterWave[] waves;
 
+        [Header("Intro")]
+        [SerializeField] private string introTitle;
+        [SerializeField] private string introSubtitle;
+
         [Header("Clear Reward")]
         [SerializeField] private RoomRewardType clearReward = RoomRewardType.Auto;
         [SerializeField] private bool waitForUpgradeRewardBeforeExit = true;
@@ -21,6 +25,8 @@ namespace NeonBreaker.Rooms
         [SerializeField, Range(0f, 1f)] private float healPercent = 0f;
 
         public string DisplayName => displayName;
+        public string IntroTitle => string.IsNullOrWhiteSpace(introTitle) ? displayName : introTitle;
+        public string IntroSubtitle => introSubtitle;
         public RoomType RoomType => roomType;
         public bool LockDoorsOnEnter => lockDoorsOnEnter;
         public bool UnlockExitOnClear => unlockExitOnClear;
